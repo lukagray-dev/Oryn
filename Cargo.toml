@@ -1,0 +1,24 @@
+[workspace]
+members = [
+    "gui",
+    "oryn-rs"
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+authors = ["Luka Gray <heylukagray@gmail.com>"]
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/lukagray-dev/oryn"
+edition = "2021"
+
+[workspace.dependencies]
+anyhow = "1.0.102"
+dirs = "6.0.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+thiserror = "2.0.18"
+
+[profile.release]
+codegen-units = 1
+lto = true

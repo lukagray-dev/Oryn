@@ -1,0 +1,54 @@
+# Rust / Cargo
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+*.dSYM/
+
+# Keep Cargo.lock for binary apps; remove this if the crate is turned into a pure library
+# Cargo.lock
+
+# Slint / GUI build artifacts
+*.slint.bk
+
+# Android / Gradle
+**/.gradle/
+**/build/
+**/captures/
+**/*.apk
+**/*.aar
+**/*.ap_
+**/*.dex
+local.properties
+*.keystore
+*.jks
+
+# IDE / editor files
+.vscode/
+.idea/
+*.iml
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs / temp / cache
+*.log
+*.tmp
+*.temp
+*.bak
+.cache/
+.tmp/
+tmp/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Project-specific: do not track the vendored Lucide icons repo
+/assets/lucide/

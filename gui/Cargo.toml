@@ -1,0 +1,15 @@
+[package]
+name = "oryn-gui"
+description = "Oryn graphical UI frontend (Slint-based)"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+repository.workspace = true
+
+[dependencies]
+slint = "1.16.1"
+oryn-rs = { path = "../oryn-rs" }
+
+[build-dependencies]
+slint-build = "1.16.1"
