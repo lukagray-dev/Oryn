@@ -10,6 +10,7 @@
 import { Tokens } from "./shared/tokens.slint";
 import { Titlebar } from "./titlebar/titlebar.slint";
 import { Sidebar, SidebarProject, SidebarConversation } from "./left-sidebar/left-sidebar.slint";
+import { MainContent } from "./main-content/main-content.slint";
 
 export component AppWindow inherits Window {
     // Default window geometry setup
@@ -47,11 +48,6 @@ export component AppWindow inherits Window {
     default-font-family: Tokens.font_family;
     default-font-size: Tokens.body_font_size;
     default-font-weight: 400;
-
-    // Sample editor content properties for demonstration
-    in-out property <string> document_title: "Untitled Document";
-    in-out property <string> editor_text: "Welcome to Oryn.\n\nA minimalist WYSIWYG markdown editor built for speed, focus, and clarity. Start typing your ideas, notes, outlines, or articles smoothly.";
-    in-out property <string> code_snippet: "fn main() {\n    println!(\"Hello from Oryn core engine!\");\n}";
 
     // Callbacks exposed to host Rust backend
     callback minimize_requested();
@@ -98,78 +94,9 @@ export component AppWindow inherits Window {
         }
 
         // ---------------------------------------------------------------------
-        // Main Content Area (Note Writing Canvas)
+        // Scrollable Main Content Workspace Component
         // ---------------------------------------------------------------------
-        content_canvas := Rectangle {
-            horizontal-stretch: 1;
-            background: Tokens.window_background;
-
-            VerticalLayout {
-                padding-left: 40px;
-                padding-right: 40px;
-                padding-top: 30px;
-                padding-bottom: 30px;
-                spacing: 20px;
-
-                // Document Title Input (Uses UI Font: Open Sans)
-                TextInput {
-                    text: root.document_title;
-                    font-family: Tokens.font_family;
-                    font-size: 24px;
-                    font-weight: 700;
-                    color: Tokens.text_primary;
-                    single-line: true;
-                }
-
-                // Divider line below header
-                Rectangle {
-                    height: 1px;
-                    background: Tokens.dropdown_border;
-                }
-
-                // Note Typing Canvas (Uses Editor Serif Font: Literata)
-                TextInput {
-                    text: root.editor_text;
-                    font-family: Tokens.editor_font_family;
-                    font-size: Tokens.editor_font_size;
-                    color: Tokens.text_secondary;
-                    wrap: word-wrap;
-                    single-line: false;
-                    vertical-stretch: 1;
-                }
-
-                // Code Block Preview Card (Uses Monospace Font: Kode Mono)
-                Rectangle {
-                    border-radius: 8px;
-                    background: #181818;
-                    border-width: 1px;
-                    border-color: Tokens.dropdown_border;
-                    height: 110px;
-
-                    VerticalLayout {
-                        padding: 16px;
-                        spacing: 8px;
-
-                        Text {
-                            text: "RUST CODE BLOCK";
-                            font-family: Tokens.font_family;
-                            font-size: 10px;
-                            font-weight: 700;
-                            color: Tokens.accent_blue;
-                        }
-
-                        TextInput {
-                            text: root.code_snippet;
-                            font-family: Tokens.code_font_family;
-                            font-size: 13px;
-                            color: #a9b7c6;
-                            single-line: false;
-                            read-only: true;
-                        }
-                    }
-                }
-            }
-        }
+        content_workspace := MainContent {}
     }
 
     // -------------------------------------------------------------------------
