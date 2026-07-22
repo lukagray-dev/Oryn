@@ -1,21 +1,218 @@
-import { Button, VerticalBox } from "std-widgets.slint";
+// =============================================================================
+// Top-Level Application Window (`ui/app-window.slint`)
+// =============================================================================
+// Main Slint window definition for Oryn. Disables standard OS frame decorations
+// to use the custom Titlebar component. Defines font assignments across the app:
+// - `Open Sans` for all general UI controls, menus, labels, chrome and everything.
+// - `Literata` only for the main note writing canvas where users type their notes.
+// - `Kode Mono` only for code blocks and monospaced text.
+
+import { Tokens } from "./shared/tokens.slint";
+import { Titlebar } from "./titlebar/titlebar.slint";
+import { Sidebar, SidebarProject, SidebarConversation } from "./left-sidebar/left-sidebar.slint";
 
 export component AppWindow inherits Window {
+    // Default window geometry setup
+    preferred-width: 960px;
+    preferred-height: 600px;
+    min-width: 800px;
+    min-height: 450px;
+
+    // Disable native window frame decorations to use our custom Slint titlebar
+    no-frame: true;
+
+    // State properties for window layout & sidebar
+    in-out property <bool> window_maximized: false;
+    in-out property <float> ui_scale: 1.0;
+    in-out property <bool> sidebar_open: true;
+    in-out property <length> sidebar_width: 240px;
+
+    // Sidebar data properties & active indexes
+    in property <[SidebarProject]> sidebar_projects: [];
+    in property <[SidebarConversation]> sidebar_chats: [];
+    in-out property <int> active_project_index: -1;
+    in-out property <int> active_conversation_index: -1;
+    in-out property <int> active_chat_index: -1;
+
+    // Dynamically disable window resize border when maximized/fullscreen
+    // so hovering window edges in fullscreen mode does not trigger resize cursor.
+    resize-border-width: root.window_maximized ? 0px : Tokens.window_resize_border_width;
+
+    // Window surface properties
+    background: Tokens.window_background;
     title: "Oryn";
     icon: @image-url("../assets/brand/icon.svg");
 
-    in-out property <int> counter: 42;
-    callback request-increase-value();
-    VerticalBox {
-        Text {
-            text: "Counter: \{root.counter}";
+    // Global font styling rules for general UI controls
+    default-font-family: Tokens.font_family;
+    default-font-size: Tokens.body_font_size;
+    default-font-weight: 400;
+
+    // Sample editor content properties for demonstration
+    in-out property <string> document_title: "Untitled Document";
+    in-out property <string> editor_text: "Welcome to Oryn.\n\nA minimalist WYSIWYG markdown editor built for speed, focus, and clarity. Start typing your ideas, notes, outlines, or articles smoothly.";
+    in-out property <string> code_snippet: "fn main() {\n    println!(\"Hello from Oryn core engine!\");\n}";
+
+    // Callbacks exposed to host Rust backend
+    callback minimize_requested();
+    callback maximize_requested();
+    callback close_window_requested();
+    callback exit_requested();
+    callback drag_window_requested();
+    callback undo_requested();
+    callback redo_requested();
+    callback new_document_requested();
+    callback open_file_requested();
+    callback save_file_requested();
+    callback settings_requested();
+
+    // -------------------------------------------------------------------------
+    // Main Workspace Layout
+    // -------------------------------------------------------------------------
+    // Positioned directly below the titlebar. Includes resizable left sidebar
+    // and note editing canvas with clean borderless edges.
+    HorizontalLayout {
+        x: 0px;
+        y: titlebar.height;
+        width: parent.width;
+        height: parent.height - titlebar.height;
+        spacing: 0px;
+
+        // ---------------------------------------------------------------------
+        // Resizable Left Sidebar Component
+        // ---------------------------------------------------------------------
+        sidebar := Sidebar {
+            sidebar_width <=> root.sidebar_width;
+            width: root.sidebar_open ? self.sidebar_width : 0px;
+            visible: root.sidebar_open;
+            horizontal-stretch: 0;
+
+            projects: root.sidebar_projects;
+            chats: root.sidebar_chats;
+            active_project_index <=> root.active_project_index;
+            active_conversation_index <=> root.active_conversation_index;
+            active_chat_index <=> root.active_chat_index;
+
+            settings_clicked => { root.settings_requested(); }
+            new_chat_clicked => { root.new_document_requested(); }
         }
 
-        Button {
-            text: "Increase value";
-            clicked => {
-                root.request-increase-value();
+        // ---------------------------------------------------------------------
+        // Main Content Area (Note Writing Canvas)
+        // ---------------------------------------------------------------------
+        content_canvas := Rectangle {
+            horizontal-stretch: 1;
+            background: Tokens.window_background;
+
+            VerticalLayout {
+                padding-left: 40px;
+                padding-right: 40px;
+                padding-top: 30px;
+                padding-bottom: 30px;
+                spacing: 20px;
+
+                // Document Title Input (Uses UI Font: Open Sans)
+                TextInput {
+                    text: root.document_title;
+                    font-family: Tokens.font_family;
+                    font-size: 24px;
+                    font-weight: 700;
+                    color: Tokens.text_primary;
+                    single-line: true;
+                }
+
+                // Divider line below header
+                Rectangle {
+                    height: 1px;
+                    background: Tokens.dropdown_border;
+                }
+
+                // Note Typing Canvas (Uses Editor Serif Font: Literata)
+                TextInput {
+                    text: root.editor_text;
+                    font-family: Tokens.editor_font_family;
+                    font-size: Tokens.editor_font_size;
+                    color: Tokens.text_secondary;
+                    wrap: word-wrap;
+                    single-line: false;
+                    vertical-stretch: 1;
+                }
+
+                // Code Block Preview Card (Uses Monospace Font: Kode Mono)
+                Rectangle {
+                    border-radius: 8px;
+                    background: #181818;
+                    border-width: 1px;
+                    border-color: Tokens.dropdown_border;
+                    height: 110px;
+
+                    VerticalLayout {
+                        padding: 16px;
+                        spacing: 8px;
+
+                        Text {
+                            text: "RUST CODE BLOCK";
+                            font-family: Tokens.font_family;
+                            font-size: 10px;
+                            font-weight: 700;
+                            color: Tokens.accent_blue;
+                        }
+
+                        TextInput {
+                            text: root.code_snippet;
+                            font-family: Tokens.code_font_family;
+                            font-size: 13px;
+                            color: #a9b7c6;
+                            single-line: false;
+                            read-only: true;
+                        }
+                    }
+                }
             }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Global Touch Dismiss Area for Dropdown Menus
+    // -------------------------------------------------------------------------
+    // Dismisses open dropdown menu panels when clicking anywhere on the main canvas.
+    global_dismiss_area := TouchArea {
+        x: 0px;
+        y: Tokens.titlebar_height;
+        width: parent.width;
+        height: parent.height - Tokens.titlebar_height;
+        enabled: titlebar.active_menu != 0;
+        clicked => {
+            titlebar.active_menu = 0;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Top Custom Titlebar Component Integration
+    // -------------------------------------------------------------------------
+    titlebar := Titlebar {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: Tokens.titlebar_height;
+        is_maximized: root.window_maximized;
+        ui_scale: root.ui_scale;
+        sidebar_open: root.sidebar_open;
+
+        sidebar_toggle_requested => {
+            root.sidebar_open = titlebar.sidebar_open;
+        }
+
+        minimize_requested => { root.minimize_requested(); }
+        maximize_requested => { root.maximize_requested(); }
+        close_window_requested => { root.close_window_requested(); }
+        exit_requested => { root.exit_requested(); }
+        drag_window_requested => { root.drag_window_requested(); }
+        undo_requested => { root.undo_requested(); }
+        redo_requested => { root.redo_requested(); }
+        new_document_requested => { root.new_document_requested(); }
+        open_file_requested => { root.open_file_requested(); }
+        save_file_requested => { root.save_file_requested(); }
+        settings_requested => { root.settings_requested(); }
     }
 }

@@ -1,0 +1,1125 @@
+// =============================================================================
+// Oryn Left Sidebar Component (`ui/left-sidebar/left-sidebar.slint`)
+// =============================================================================
+// Recreates the left navigation sidebar from Operon for Oryn.
+// Contains:
+// 1. Top action buttons: New document and Search.
+// 2. Scrollable Middle Section: Projects list (with add project button) & Documents list (with add document button).
+// 3. Bottom action button: Settings.
+// 4. Edge Resize Handle: Drag handle on the right edge allowing users to resize the sidebar width.
+// 5. Matched Theme: Uses `Tokens.titlebar_background` (#191919) matching the titlebar.
+// 6. Clean Edge: No vertical separator line.
+
+import { Tokens } from "../shared/tokens.slint";
+
+// =============================================================================
+// Shared Data Type Definitions
+// =============================================================================
+// Struct representing a single document entry.
+export struct SidebarConversation {
+    id: string,
+    title: string,
+}
+
+// Struct representing a project workspace grouping multiple documents.
+export struct SidebarProject {
+    name: string,
+    workspace: string,
+    conversations: [SidebarConversation],
+}
+
+// =============================================================================
+// Local Helper Component: IconDropdownItem
+// =============================================================================
+// Reusable dropdown item displaying an SVG icon next to a text label.
+component IconDropdownItem inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> danger: false;
+    in property <float> ui_scale: 1.0;
+    callback clicked();
+
+    width: 130px;
+    height: 28px;
+    border-radius: 6px;
+    background: item_touch.pressed
+        ? Tokens.dropdown_surface_pressed
+        : item_touch.has-hover
+            ? Tokens.dropdown_surface_hover
+            : transparent;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+
+        Image {
+            source: root.icon;
+            width: 14px * root.ui_scale;
+            height: 14px * root.ui_scale;
+            y: (parent.height - self.height) / 2;
+            colorize: item_touch.pressed || item_touch.has-hover
+                ? (root.danger ? Tokens.danger_red_hover : Tokens.text_primary)
+                : (root.danger ? Tokens.danger_red : Tokens.text_secondary);
+            image-fit: contain;
+        }
+
+        item_label := Text {
+            text: root.label;
+            font-family: Tokens.font_family;
+            color: item_touch.pressed || item_touch.has-hover
+                ? (root.danger ? Tokens.danger_red_hover : Tokens.text_primary)
+                : (root.danger ? Tokens.danger_red : Tokens.text_secondary);
+            font-size: Tokens.dropdown_font_size * root.ui_scale;
+            font-weight: 400;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+
+    item_touch := TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// =============================================================================
+// Local Helper Component: SidebarDropdownSurface
+// =============================================================================
+// Container surface for popup dropdown menus inside the sidebar.
+component SidebarDropdownSurface inherits Rectangle {
+    border-radius: Tokens.dropdown_surface_radius;
+    background: Tokens.dropdown_surface;
+    border-width: 1px;
+    border-color: Tokens.dropdown_border;
+    clip: true;
+    drop-shadow-blur: 12px;
+    drop-shadow-color: Tokens.shadow_color;
+    drop-shadow-offset-y: 4px;
+}
+
+// =============================================================================
+// Local Helper Component: SidebarDropdownSeparator
+// =============================================================================
+component SidebarDropdownSeparator inherits Rectangle {
+    width: 128px;
+    height: 1px;
+    background: Tokens.dropdown_separator;
+}
+
+// =============================================================================
+// Sidebar Section Component: NewDocument Button
+// =============================================================================
+// Primary action button at top of sidebar for creating new documents (uses Lucide plus icon).
+component NewDocument inherits Rectangle {
+    callback clicked();
+    
+    height: 38px;
+    horizontal-stretch: 1;
+    border-radius: 8px;
+    background: touch_area.has-hover 
+        ? Tokens.dropdown_surface_hover 
+        : Tokens.dropdown_surface;
+    
+    animate background { duration: 150ms; easing: ease-in-out; }
+    
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 10px;
+        
+        Image {
+            source: @image-url("../../assets/icons/sidebar/plus.svg");
+            width: 18px;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+            colorize: Tokens.text_primary;
+            image-fit: contain;
+        }
+        
+        Text {
+            text: "New document";
+            font-family: Tokens.font_family;
+            color: Tokens.text_primary;
+            font-size: Tokens.body_font_size;
+            vertical-alignment: center;
+        }
+    }
+    
+    touch_area := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// =============================================================================
+// Sidebar Section Component: Search Bar
+// =============================================================================
+// Interactive search bar button that expands into a live query input field.
+component Search inherits Rectangle {
+    in-out property <string> text: "";
+    in-out property <bool> is_searching: false;
+    
+    callback search_query_changed(string);
+    callback search_cancelled();
+    
+    height: 38px;
+    horizontal-stretch: 1;
+    border-radius: 8px;
+    border-width: root.is_searching ? 1px : 0px;
+    border-color: root.is_searching ? Tokens.dropdown_border : transparent;
+    
+    background: root.is_searching 
+        ? Tokens.dropdown_surface 
+        : (touch_area.has-hover ? Tokens.dropdown_surface_hover : transparent);
+    
+    animate background { duration: 150ms; }
+    
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 10px;
+        
+        Image {
+            source: @image-url("../../assets/icons/sidebar/search.svg");
+            width: 18px;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+            colorize: root.is_searching ? Tokens.text_muted : Tokens.text_secondary;
+            image-fit: contain;
+            animate colorize { duration: 150ms; }
+        }
+        
+        if (!root.is_searching) : Text {
+            text: "Search";
+            font-family: Tokens.font_family;
+            color: Tokens.text_secondary;
+            font-size: Tokens.body_font_size;
+            vertical-alignment: center;
+        }
+        
+        if (root.is_searching) : Rectangle {
+            horizontal-stretch: 1;
+            clip: true;
+            
+            flickable := Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-width: max(self.width, input.preferred-width);
+                interactive: true;
+                
+                input := TextInput {
+                    width: max(parent.width, self.preferred-width);
+                    font-size: Tokens.body_font_size;
+                    font-family: Tokens.font_family;
+                    color: Tokens.text_primary;
+                    vertical-alignment: center;
+                    single-line: true;
+                    text <=> root.text;
+                    
+                    edited => {
+                        root.search_query_changed(self.text);
+                        if (self.preferred-width > flickable.width) {
+                            flickable.viewport-x = flickable.width - self.preferred-width;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (root.is_searching && root.text != "") : Image {
+            source: @image-url("../../assets/icons/sidebar/delete.svg");
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+            colorize: clear_touch.has-hover ? Tokens.text_primary : Tokens.text_muted;
+            image-fit: contain;
+            
+            clear_touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    root.text = "";
+                    root.search_query_changed("");
+                }
+            }
+        }
+        
+        if (root.is_searching) : Image {
+            source: @image-url("../../assets/icons/settings/close.svg");
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+            colorize: close_touch.has-hover ? Tokens.text_primary : Tokens.text_muted;
+            image-fit: contain;
+            
+            close_touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    root.is_searching = false;
+                    root.text = "";
+                    root.search_query_changed("");
+                    root.search_cancelled();
+                }
+            }
+        }
+    }
+    
+    touch_area := TouchArea {
+        mouse-cursor: root.is_searching ? default : pointer;
+        enabled: !root.is_searching;
+        clicked => {
+            root.is_searching = true;
+        }
+    }
+}
+
+// =============================================================================
+// Sidebar Section Component: Conversation Item Row
+// =============================================================================
+// Individual document item with title, hover highlights, and context menu popup.
+component Conversation inherits Rectangle {
+    in property <string> title: "Untitled Document";
+    in property <bool> is_active: false;
+
+    callback clicked();
+    callback share_clicked();
+    callback rename_clicked();
+    callback move_to_clicked();
+    callback pin_clicked();
+    callback fork_clicked();
+    callback delete_clicked();
+    
+    height: 32px;
+    horizontal-stretch: 1;
+    border-radius: 6px;
+    background: is_active 
+        ? Tokens.dropdown_surface_hover 
+        : (touch_area.has-hover ? Tokens.dropdown_surface : transparent);
+    
+    animate background { duration: 150ms; easing: ease-in-out; }
+    
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 36px;
+        
+        Text {
+            text: root.title;
+            font-family: Tokens.font_family;
+            color: is_active ? Tokens.text_primary : Tokens.text_secondary;
+            font-size: Tokens.body_font_size;
+            vertical-alignment: center;
+            horizontal-alignment: left;
+            overflow: elide;
+        }
+    }
+    
+    touch_area := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    three_dots := Rectangle {
+        x: parent.width - self.width - 4px;
+        y: (parent.height - self.height) / 2;
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        background: three_dots_touch.has-hover ? Tokens.dropdown_surface_hover : transparent;
+        visible: touch_area.has-hover || three_dots_touch.has-hover || root.is_active;
+        
+        animate background { duration: 100ms; }
+
+        Image {
+            source: @image-url("../../assets/icons/sidebar/more-vertical.svg");
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+            x: (parent.width - self.width) / 2;
+            colorize: Tokens.text_muted;
+            image-fit: contain;
+        }
+
+        three_dots_touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                menu_panel.show();
+            }
+        }
+    }
+
+    menu_panel := PopupWindow {
+        x: parent.width - self.width - 4px;
+        y: parent.height + 4px;
+        width: 140px;
+        height: menu_layout.preferred-height;
+        close-policy: close-on-click-outside;
+
+        SidebarDropdownSurface {
+            width: 100%;
+            height: 100%;
+
+            menu_layout := VerticalLayout {
+                padding: Tokens.dropdown_surface_padding;
+                spacing: Tokens.dropdown_item_gap;
+
+                IconDropdownItem {
+                    label: "Share";
+                    icon: @image-url("../../assets/icons/sidebar/share.svg");
+                    clicked => {
+                        menu_panel.close();
+                        root.share_clicked();
+                    }
+                }
+                IconDropdownItem {
+                    label: "Rename";
+                    icon: @image-url("../../assets/icons/sidebar/pencil.svg");
+                    clicked => {
+                        menu_panel.close();
+                        root.rename_clicked();
+                    }
+                }
+                IconDropdownItem {
+                    label: "Move to";
+                    icon: @image-url("../../assets/icons/sidebar/folder-input.svg");
+                    clicked => {
+                        menu_panel.close();
+                        root.move_to_clicked();
+                    }
+                }
+                IconDropdownItem {
+                    label: "Pin";
+                    icon: @image-url("../../assets/icons/sidebar/pin.svg");
+                    clicked => {
+                        menu_panel.close();
+                        root.pin_clicked();
+                    }
+                }
+                IconDropdownItem {
+                    label: "Fork";
+                    icon: @image-url("../../assets/icons/sidebar/git-fork.svg");
+                    clicked => {
+                        menu_panel.close();
+                        root.fork_clicked();
+                    }
+                }
+                SidebarDropdownSeparator {}
+                IconDropdownItem {
+                    label: "Delete";
+                    icon: @image-url("../../assets/icons/sidebar/trash.svg");
+                    danger: true;
+                    clicked => {
+                        menu_panel.close();
+                        root.delete_clicked();
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Sidebar Section Component: Projects Group List
+// =============================================================================
+// Section rendering workspace folders and their nested documents. Includes a plus button in header.
+component Projects inherits Rectangle {
+    in property <[SidebarProject]> projects: [];
+    in-out property <int> active_project_index: -1;
+    in-out property <int> active_conversation_index: -1;
+    in-out property <bool> is_expanded: true;
+
+    callback conversation_clicked(string, int, int);
+    callback delete_conversation_clicked(string, int, int);
+    callback header_clicked();
+    callback new_project_clicked();
+    callback new_session_clicked(string, int);
+    callback share_project_clicked(int);
+    callback rename_project_clicked(int);
+    callback project_settings_clicked(int);
+    callback project_home_clicked(int);
+    callback pin_project_clicked(int);
+    callback delete_project_clicked(string, int);
+
+    height: content.preferred-height;
+    horizontal-stretch: 1;
+
+    content := VerticalLayout {
+        spacing: 4px;
+        padding: 4px;
+
+        header := Rectangle {
+            height: 28px;
+            horizontal-stretch: 1;
+            border-radius: 6px;
+            background: header_touch.has-hover ? Tokens.dropdown_surface : transparent;
+            animate background { duration: 150ms; }
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 56px;
+                spacing: 6px;
+
+                Image {
+                    source: @image-url("../../assets/icons/sidebar/projects.svg");
+                    width: 16px;
+                    height: 16px;
+                    y: (parent.height - self.height) / 2;
+                    colorize: Tokens.text_muted;
+                    image-fit: contain;
+                }
+
+                Text {
+                    text: "Projects";
+                    font-family: Tokens.font_family;
+                    color: Tokens.text_muted;
+                    font-size: Tokens.body_font_size - 1px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+
+            header_touch := TouchArea {
+                clicked => {
+                    root.is_expanded = !root.is_expanded;
+                    root.header_clicked();
+                }
+            }
+
+            // Plus icon button for creating a new project (uses Lucide plus.svg)
+            new_project_btn := Rectangle {
+                x: parent.width - 50px;
+                y: (parent.height - self.height) / 2;
+                width: 20px;
+                height: 20px;
+                border-radius: 4px;
+                background: new_project_touch.has-hover ? Tokens.dropdown_surface_hover : transparent;
+                visible: header_touch.has-hover || new_project_touch.has-hover;
+                animate background { duration: 100ms; }
+
+                Image {
+                    source: @image-url("../../assets/icons/sidebar/plus.svg");
+                    width: 12px;
+                    height: 12px;
+                    y: (parent.height - self.height) / 2;
+                    x: (parent.width - self.width) / 2;
+                    colorize: Tokens.text_muted;
+                    image-fit: contain;
+                }
+
+                new_project_touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.new_project_clicked();
+                    }
+                }
+            }
+
+            projects_header_chevron := Image {
+                x: parent.width - 24px;
+                y: (parent.height - self.height) / 2;
+                source: is_expanded
+                    ? @image-url("../../assets/icons/sidebar/chevron-down.svg")
+                    : @image-url("../../assets/icons/sidebar/chevron-right.svg");
+                width: 16px;
+                height: 16px;
+                colorize: Tokens.text_muted;
+                image-fit: contain;
+            }
+        }
+
+        if is_expanded: VerticalLayout {
+            spacing: 2px;
+
+            for project[project_index] in root.projects: VerticalLayout {
+                spacing: 2px;
+
+                project_header := Rectangle {
+                    height: 32px;
+                    horizontal-stretch: 1;
+                    border-radius: 6px;
+                    background: project_touch.has-hover ? Tokens.dropdown_surface : transparent;
+                    animate background { duration: 150ms; }
+
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 84px;
+                        spacing: 8px;
+
+                        Image {
+                            source: @image-url("../../assets/icons/sidebar/projects.svg");
+                            width: 16px;
+                            height: 16px;
+                            y: (parent.height - self.height) / 2;
+                            colorize: Tokens.text_secondary;
+                            image-fit: contain;
+                        }
+
+                        Text {
+                            text: project.name;
+                            font-family: Tokens.font_family;
+                            color: Tokens.text_secondary;
+                            font-size: Tokens.body_font_size;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                        }
+                    }
+
+                    project_touch := TouchArea {
+                        clicked => {
+                            if root.active_project_index == project_index {
+                                root.active_project_index = -1;
+                            } else {
+                                root.active_project_index = project_index;
+                            }
+                        }
+                    }
+
+                    new_session_btn := Rectangle {
+                        x: parent.width - 78px;
+                        y: (parent.height - self.height) / 2;
+                        width: 22px;
+                        height: 22px;
+                        border-radius: 4px;
+                        background: new_session_touch.has-hover ? Tokens.dropdown_surface_hover : transparent;
+                        visible: project_touch.has-hover || new_session_touch.has-hover || root.active_project_index == project_index;
+                        animate background { duration: 100ms; }
+
+                        Image {
+                            source: @image-url("../../assets/icons/sidebar/plus.svg");
+                            width: 13px;
+                            height: 13px;
+                            y: (parent.height - self.height) / 2;
+                            x: (parent.width - self.width) / 2;
+                            colorize: Tokens.text_muted;
+                            image-fit: contain;
+                        }
+
+                        new_session_touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.new_session_clicked(project.workspace, project_index);
+                            }
+                        }
+                    }
+
+                    three_dots_btn := Rectangle {
+                        x: parent.width - 50px;
+                        y: (parent.height - self.height) / 2;
+                        width: 22px;
+                        height: 22px;
+                        border-radius: 4px;
+                        background: three_dots_touch.has-hover ? Tokens.dropdown_surface_hover : transparent;
+                        visible: project_touch.has-hover || three_dots_touch.has-hover || root.active_project_index == project_index;
+                        animate background { duration: 100ms; }
+
+                        Image {
+                            source: @image-url("../../assets/icons/sidebar/more-vertical.svg");
+                            width: 13px;
+                            height: 13px;
+                            y: (parent.height - self.height) / 2;
+                            x: (parent.width - self.width) / 2;
+                            colorize: Tokens.text_muted;
+                            image-fit: contain;
+                        }
+
+                        three_dots_touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                project_menu_panel.show();
+                            }
+                        }
+                    }
+
+                    project_row_chevron := Image {
+                        x: parent.width - 22px;
+                        y: (parent.height - self.height) / 2;
+                        source: project_index == root.active_project_index
+                            ? @image-url("../../assets/icons/sidebar/chevron-down.svg")
+                            : @image-url("../../assets/icons/sidebar/chevron-right.svg");
+                        width: 14px;
+                        height: 14px;
+                        colorize: Tokens.text_muted;
+                        image-fit: contain;
+                    }
+
+                    project_menu_panel := PopupWindow {
+                        x: parent.width - self.width - 4px;
+                        y: parent.height + 4px;
+                        width: 140px;
+                        height: project_menu_layout.preferred-height;
+                        close-policy: close-on-click-outside;
+
+                        SidebarDropdownSurface {
+                            width: 100%;
+                            height: 100%;
+
+                            project_menu_layout := VerticalLayout {
+                                padding: Tokens.dropdown_surface_padding;
+                                spacing: Tokens.dropdown_item_gap;
+
+                                IconDropdownItem {
+                                    label: "Share";
+                                    icon: @image-url("../../assets/icons/sidebar/share.svg");
+                                    clicked => {
+                                        project_menu_panel.close();
+                                        root.share_project_clicked(project_index);
+                                    }
+                                }
+                                IconDropdownItem {
+                                    label: "Rename";
+                                    icon: @image-url("../../assets/icons/sidebar/pencil.svg");
+                                    clicked => {
+                                        project_menu_panel.close();
+                                        root.rename_project_clicked(project_index);
+                                    }
+                                }
+                                IconDropdownItem {
+                                    label: "Settings";
+                                    icon: @image-url("../../assets/icons/sidebar/settings.svg");
+                                    clicked => {
+                                        project_menu_panel.close();
+                                        root.project_settings_clicked(project_index);
+                                    }
+                                }
+                                IconDropdownItem {
+                                    label: "Home";
+                                    icon: @image-url("../../assets/icons/sidebar/home.svg");
+                                    clicked => {
+                                        project_menu_panel.close();
+                                        root.project_home_clicked(project_index);
+                                    }
+                                }
+                                IconDropdownItem {
+                                    label: "Pin";
+                                    icon: @image-url("../../assets/icons/sidebar/pin.svg");
+                                    clicked => {
+                                        project_menu_panel.close();
+                                        root.pin_project_clicked(project_index);
+                                    }
+                                }
+                                SidebarDropdownSeparator {}
+                                IconDropdownItem {
+                                    label: "Delete";
+                                    icon: @image-url("../../assets/icons/sidebar/trash.svg");
+                                    danger: true;
+                                    clicked => {
+                                        project_menu_panel.close();
+                                        root.delete_project_clicked(project.workspace, project_index);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if project_index == root.active_project_index: VerticalLayout {
+                    spacing: 2px;
+                    padding-left: 12px;
+
+                    for conversation[conv_index] in project.conversations: Conversation {
+                        title: conversation.title;
+                        is_active: conv_index == root.active_conversation_index;
+
+                        clicked => {
+                            root.active_conversation_index = conv_index;
+                            root.conversation_clicked(conversation.id, project_index, conv_index);
+                        }
+                        delete_clicked => {
+                            root.delete_conversation_clicked(conversation.id, project_index, conv_index);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Sidebar Section Component: Documents List
+// =============================================================================
+component Documents inherits Rectangle {
+    in property <[SidebarConversation]> document_titles: [];
+    in-out property <int> active_chat_index: -1;
+    in-out property <bool> is_expanded: true;
+    
+    callback document_clicked(string, int);
+    callback delete_document_clicked(string, int);
+    callback header_clicked();
+    callback new_document_clicked();
+
+    height: content.preferred-height;
+    horizontal-stretch: 1;
+
+    content := VerticalLayout {
+        spacing: 4px;
+        padding: 4px;
+
+        header := Rectangle {
+            height: 28px;
+            horizontal-stretch: 1;
+            border-radius: 6px;
+            background: header_touch.has-hover ? Tokens.dropdown_surface : transparent;
+            animate background { duration: 150ms; }
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 56px;
+                spacing: 6px;
+
+                Image {
+                    source: @image-url("../../assets/icons/sidebar/chats.svg");
+                    width: 16px;
+                    height: 16px;
+                    y: (parent.height - self.height) / 2;
+                    colorize: Tokens.text_muted;
+                    image-fit: contain;
+                }
+
+                Text {
+                    text: "Documents";
+                    font-family: Tokens.font_family;
+                    color: Tokens.text_muted;
+                    font-size: Tokens.body_font_size - 1px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+
+            header_touch := TouchArea {
+                clicked => {
+                    root.is_expanded = !root.is_expanded;
+                    root.header_clicked();
+                }
+            }
+
+            new_doc_btn := Rectangle {
+                x: parent.width - 50px;
+                y: (parent.height - self.height) / 2;
+                width: 20px;
+                height: 20px;
+                border-radius: 4px;
+                background: new_doc_touch.has-hover ? Tokens.dropdown_surface_hover : transparent;
+                visible: header_touch.has-hover || new_doc_touch.has-hover;
+                animate background { duration: 100ms; }
+
+                Image {
+                    source: @image-url("../../assets/icons/sidebar/plus.svg");
+                    width: 12px;
+                    height: 12px;
+                    y: (parent.height - self.height) / 2;
+                    x: (parent.width - self.width) / 2;
+                    colorize: Tokens.text_muted;
+                    image-fit: contain;
+                }
+
+                new_doc_touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.new_document_clicked();
+                    }
+                }
+            }
+
+            docs_header_chevron := Image {
+                x: parent.width - 24px;
+                y: (parent.height - self.height) / 2;
+                source: is_expanded 
+                    ? @image-url("../../assets/icons/sidebar/chevron-down.svg")
+                    : @image-url("../../assets/icons/sidebar/chevron-right.svg");
+                width: 16px;
+                height: 16px;
+                colorize: Tokens.text_muted;
+                image-fit: contain;
+            }
+        }
+
+        if is_expanded : VerticalLayout {
+            spacing: 2px;
+
+            for document[index] in root.document_titles : Conversation {
+                title: document.title;
+                is_active: index == root.active_chat_index;
+
+                clicked => {
+                    root.active_chat_index = index;
+                    root.document_clicked(document.id, index);
+                }
+                delete_clicked => {
+                    root.delete_document_clicked(document.id, index);
+                }
+            }
+
+            if root.document_titles.length == 0 : Rectangle {
+                height: 60px;
+                horizontal-stretch: 1;
+
+                VerticalLayout {
+                    alignment: center;
+
+                    Text {
+                        text: "No documents yet";
+                        font-family: Tokens.font_family;
+                        color: Tokens.text_muted;
+                        font-size: Tokens.body_font_size - 1px;
+                        horizontal-alignment: center;
+                    }
+
+                    Text {
+                        text: "Create a new document to begin";
+                        font-family: Tokens.font_family;
+                        color: Tokens.text_muted;
+                        font-size: Tokens.body_font_size - 2px;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Sidebar Section Component: Settings Button
+// =============================================================================
+component Settings inherits Rectangle {
+    callback clicked();
+    
+    height: 38px;
+    horizontal-stretch: 1;
+    border-radius: 8px;
+    background: touch_area.has-hover 
+        ? Tokens.dropdown_surface_hover 
+        : transparent;
+    
+    animate background { duration: 150ms; easing: ease-in-out; }
+    
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 10px;
+        
+        Image {
+            source: @image-url("../../assets/icons/sidebar/settings.svg");
+            width: 18px;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+            colorize: Tokens.text_secondary;
+            image-fit: contain;
+        }
+        
+        Text {
+            text: "Settings";
+            font-family: Tokens.font_family;
+            color: Tokens.text_secondary;
+            font-size: Tokens.body_font_size;
+            vertical-alignment: center;
+        }
+    }
+    
+    touch_area := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// =============================================================================
+// Exported Main Component: Sidebar
+// =============================================================================
+// Main resizable left navigation panel matching Operon design system.
+export component Sidebar inherits Rectangle {
+    // Dynamically adjustable sidebar width
+    in-out property <length> sidebar_width: 240px;
+    
+    // Width boundaries for mouse dragging
+    property <length> sidebar_min_width: 180px;
+    property <length> sidebar_max_width: 400px;
+    
+    // Dynamic data arrays
+    in property <[SidebarProject]> projects: [];
+    in property <[SidebarConversation]> chats: [];
+    
+    // Active selection indexes
+    in-out property <int> active_project_index: -1;
+    in-out property <int> active_conversation_index: -1;
+    in-out property <int> active_chat_index: -1;
+    
+    // Search query states
+    in-out property <string> search_text: "";
+    in-out property <bool> is_searching: false;
+    
+    // Interaction callbacks
+    callback new_chat_clicked();
+    callback new_project_clicked();
+    callback search_query_changed(string);
+    callback search_cancelled();
+    callback settings_clicked();
+    callback project_conversation_clicked(string, int, int);
+    callback chat_clicked(string, int);
+    callback delete_chat_clicked(string, int);
+    callback delete_conversation_clicked(string, int, int);
+    callback delete_project_clicked(string, int);
+    callback new_session_clicked(string, int);
+    callback width_changed(length);
+
+    width: root.sidebar_width;
+    
+    // Sidebar background color matching titlebar exactly (#191919)
+    background: Tokens.titlebar_background;
+
+    VerticalLayout {
+        width: parent.width;
+        height: parent.height;
+        padding: 8px;
+        spacing: 8px;
+
+        // ===== TOP SECTION: Action Buttons =====
+        top_actions := VerticalLayout {
+            spacing: 4px;
+            vertical-stretch: 0;
+            
+            NewDocument {
+                clicked => {
+                    root.new_chat_clicked();
+                }
+            }
+            
+            Search {
+                text <=> root.search_text;
+                is_searching <=> root.is_searching;
+                
+                search_query_changed(query) => {
+                    root.search_query_changed(query);
+                }
+                search_cancelled => {
+                    root.search_cancelled();
+                }
+            }
+        }
+
+        // ===== MIDDLE SECTION: Scrollable Content =====
+        scroll_area := Rectangle {
+            vertical-stretch: 1;
+            
+            Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-height: content_layout.preferred-height;
+                
+                content_layout := VerticalLayout {
+                    spacing: 16px;
+                    width: parent.width;
+                    
+                    Projects {
+                        projects: root.projects;
+                        active_project_index <=> root.active_project_index;
+                        active_conversation_index <=> root.active_conversation_index;
+                        
+                        new_project_clicked => {
+                            root.new_project_clicked();
+                        }
+                        conversation_clicked(session_id, proj_idx, conv_idx) => {
+                            root.active_project_index = proj_idx;
+                            root.active_conversation_index = conv_idx;
+                            root.active_chat_index = -1;
+                            root.project_conversation_clicked(session_id, proj_idx, conv_idx);
+                        }
+                        delete_conversation_clicked(session_id, proj_idx, conv_idx) => {
+                            root.delete_conversation_clicked(session_id, proj_idx, conv_idx);
+                        }
+                        delete_project_clicked(proj_path, proj_idx) => {
+                            root.delete_project_clicked(proj_path, proj_idx);
+                        }
+                        new_session_clicked(proj_path, proj_idx) => {
+                            root.new_session_clicked(proj_path, proj_idx);
+                        }
+                    }
+
+                    Documents {
+                        document_titles: root.chats;
+                        active_chat_index <=> root.active_chat_index;
+                        
+                        document_clicked(session_id, chat_idx) => {
+                            root.active_project_index = -1;
+                            root.active_conversation_index = -1;
+                            root.active_chat_index = chat_idx;
+                            root.chat_clicked(session_id, chat_idx);
+                        }
+                        delete_document_clicked(session_id, chat_idx) => {
+                            root.delete_chat_clicked(session_id, chat_idx);
+                        }
+                        new_document_clicked => {
+                            root.new_chat_clicked();
+                        }
+                    }
+
+                    Rectangle {
+                        height: 8px;
+                    }
+                }
+            }
+        }
+
+        // ===== BOTTOM SECTION: Settings Button =====
+        bottom_actions := VerticalLayout {
+            spacing: 4px;
+            vertical-stretch: 0;
+
+            Settings {
+                clicked => {
+                    root.settings_clicked();
+                }
+            }
+        }
+    }
+
+    // ===== RESIZE HANDLE =====
+    // Edge handle positioned at the right boundary allowing width dragging.
+    // Clean edge design: no vertical separator line.
+    resize_handle := Rectangle {
+        x: parent.width - self.width / 2;
+        width: 4px;
+        height: parent.height;
+        background: resize_touch.has-hover 
+            ? Tokens.accent_blue 
+            : transparent;
+        
+        animate background { duration: 150ms; }
+
+        resize_touch := TouchArea {
+            property <length> drag_start_width: root.sidebar_width;
+            mouse-cursor: ew-resize;
+            
+            pointer-event(event) => {
+                if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                    self.drag_start_width = root.sidebar_width;
+                }
+            }
+            
+            moved => {
+                if (self.pressed) {
+                    root.sidebar_width = max(
+                        root.sidebar_min_width,
+                        min(
+                            root.sidebar_max_width,
+                            root.sidebar_width + (self.mouse-x - self.pressed-x)
+                        )
+                    );
+                    root.width_changed(root.sidebar_width);
+                }
+            }
+        }
+    }
+}

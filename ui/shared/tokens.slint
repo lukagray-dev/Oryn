@@ -1,0 +1,131 @@
+// =============================================================================
+// Oryn Design Tokens System (`ui/shared/tokens.slint`)
+// =============================================================================
+// This file serves as the single source of truth for all visual tokens,
+// colors, fonts, spacing, and component geometries used across the Oryn application.
+// By centralizing these design variables, we ensure consistent aesthetic quality
+// and brand alignment throughout the GUI.
+
+// -----------------------------------------------------------------------------
+// Font Imports
+// -----------------------------------------------------------------------------
+// We import three distinct font families for specific UI roles:
+// 1. OpenSans: Used for general UI chrome (labels, menus, headers, buttons).
+// 2. Literata: Used for reading/editing notes & document text (WYSIWYG editor).
+// 3. KodeMono: Used for code blocks, terminal outputs, and monospaced snippets.
+import "../../assets/font/OpenSans/static/OpenSans-Regular.ttf";
+import "../../assets/font/Literata/static/Literata-Regular.ttf";
+import "../../assets/font/KodeMono/KodeMono-Regular.ttf";
+
+// Exported global singleton accessible from any Slint file.
+export global Tokens {
+    // -------------------------------------------------------------------------
+    // Font Family Names
+    // -------------------------------------------------------------------------
+    // Default UI font family used across windows, buttons, labels, and menus.
+    in property <string> font_family: "Open Sans";
+
+    // Dedicated serif font family reserved for the document editor canvas.
+    in property <string> editor_font_family: "Literata";
+
+    // Dedicated monospace font family used for code blocks and technical text.
+    in property <string> code_font_family: "Kode Mono";
+
+    // -------------------------------------------------------------------------
+    // Primary Surface & Window Background Colors
+    // -------------------------------------------------------------------------
+    // Main window backdrop canvas color (deep black).
+    in property <color> window_background: #000000;
+
+    // Dedicated titlebar background color (sleek dark graphite strip).
+    in property <color> titlebar_background: #191919;
+
+    // Subtle hover/gradient variant for chrome highlights.
+    in property <color> titlebar_background_soft: #202020;
+
+    // -------------------------------------------------------------------------
+    // Typography Foreground Colors
+    // -------------------------------------------------------------------------
+    // Primary high-contrast text color for active labels and headers.
+    in property <color> text_primary: #ffffff;
+
+    // Secondary softer text color for secondary labels and menu items.
+    in property <color> text_secondary: #d5d5d5;
+
+    // Muted/disabled text color for passive UI controls.
+    in property <color> text_muted: #747474;
+
+    // -------------------------------------------------------------------------
+    // Interactive & Status Accent Colors
+    // -------------------------------------------------------------------------
+    // White used for active highlights and focus states.
+    in property <color> accent_blue: #ffffff;
+    in property <color> accent_blue_hover: #ffffff;
+
+    // Danger red color used for destructive actions (e.g. Close window button).
+    in property <color> danger_red: #ff0000c9;
+    in property <color> danger_red_hover: #ff0000;
+
+    // -------------------------------------------------------------------------
+    // Dropdown Panel Colors
+    // -------------------------------------------------------------------------
+    // Background surface for titlebar dropdown menus and floating popovers.
+    in property <color> dropdown_surface: #1f1f1f;
+    in property <color> dropdown_surface_hover: #2b2b2b;
+    in property <color> dropdown_surface_pressed: #2a2a2a;
+    in property <color> dropdown_border: #373737;
+    in property <color> dropdown_separator: #868686;
+    in property <color> shadow_color: #000000;
+
+    // -------------------------------------------------------------------------
+    // Base Font Sizes
+    // -------------------------------------------------------------------------
+    in property <length> body_font_size: 13px;
+    in property <length> titlebar_font_size: 14px;
+    in property <length> dropdown_font_size: 13px;
+    in property <length> editor_font_size: 16px;
+
+    // -------------------------------------------------------------------------
+    // Titlebar Geometry & Layout Metrics
+    // -------------------------------------------------------------------------
+    // Total vertical height of the titlebar strip.
+    in property <length> titlebar_height: 36px;
+
+    // Invisible top edge resize strip for frameless windows.
+    in property <length> window_resize_border_width: 6px;
+
+    // Horizontal padding inside the titlebar.
+    in property <length> titlebar_padding_x: 12px;
+
+    // Size of the brand icon container.
+    in property <length> titlebar_logo_size: 20px;
+
+    // Size of action icons inside titlebar buttons.
+    in property <length> titlebar_icon_size: 14px;
+
+    // Hit target dimensions for titlebar icon buttons.
+    in property <length> titlebar_icon_hit_width: 24px;
+    in property <length> titlebar_icon_hit_height: 22px;
+
+    // Width reserved for navigation (back/forward) buttons.
+    in property <length> titlebar_navigation_width: 52px;
+
+    // Width reserved for right window actions (min/max/close).
+    in property <length> titlebar_actions_width: 80px;
+
+    // Gaps between buttons and menu items.
+    in property <length> titlebar_button_gap: 4px;
+    in property <length> titlebar_menu_gap: 2px;
+
+    // -------------------------------------------------------------------------
+    // Dropdown Surface Geometry Metrics
+    // -------------------------------------------------------------------------
+    in property <length> dropdown_surface_width: 220px;
+    in property <length> dropdown_surface_radius: 10px;
+    in property <length> dropdown_surface_padding: 6px;
+    in property <length> dropdown_item_height: 28px;
+    in property <length> dropdown_item_gap: 2px;
+    in property <length> dropdown_item_padding_x: 12px;
+    in property <length> dropdown_trigger_padding_x: 4px;
+    in property <length> dropdown_trigger_hit_height: 22px;
+}

@@ -1,0 +1,821 @@
+// =============================================================================
+// Custom Oryn Titlebar Component (`ui/titlebar/titlebar.slint`)
+// =============================================================================
+// This file implements a custom, frameless titlebar for Oryn, recreating the
+// elegant chrome design from Operon. It replaces default OS window decorations
+// with a dark, modern titlebar containing:
+// 1. Interactive Brand Logo (with hover sidebar toggle icon)
+// 2. Undo & Redo Controls (using Lucide icons)
+// 3. Dropdown Menus (File, View, Window, Help)
+// 4. Native Window Action Controls (Minimize, Maximize/Restore, Close)
+// 5. Window Drag & Double-Click Maximize region
+
+import { Tokens } from "../shared/tokens.slint";
+
+// =============================================================================
+// Helper Component: TitlebarIconButton
+// =============================================================================
+// A reusable icon button primitive used for navigation (undo/redo) and window
+// controls (min/max/close). It manages hover, press, and colorization states.
+component TitlebarIconButton inherits Rectangle {
+    // Input properties for icon asset and custom state colors.
+    in property <image> icon;
+    in property <color> idle_color: Tokens.text_secondary;
+    in property <color> hover_color: Tokens.text_primary;
+    in property <color> pressed_color: Tokens.text_primary;
+    in property <length> icon_size: Tokens.titlebar_icon_size;
+    
+    // Background surface customization options.
+    in property <bool> show_surface: false;
+    in property <color> surface_idle_color: transparent;
+    in property <color> surface_hover_color: #2a2d31;
+    in property <color> surface_pressed_color: #353a40;
+    in property <length> surface_radius: 6px;
+    
+    // Action callback emitted when the user clicks the button.
+    callback clicked();
+
+    width: Tokens.titlebar_icon_hit_width;
+    height: Tokens.titlebar_icon_hit_height;
+    background: transparent;
+
+    // Optional background highlight surface shown on hover/press.
+    surface := Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        border-radius: root.surface_radius;
+        visible: root.show_surface;
+        background: icon_touch.pressed
+            ? root.surface_pressed_color
+            : icon_touch.has-hover
+                ? root.surface_hover_color
+                : root.surface_idle_color;
+    }
+
+    // Centered SVG icon image with state-based tinting (colorize).
+    icon_image := Image {
+        source: root.icon;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.icon_size;
+        height: root.icon_size;
+        colorize: icon_touch.pressed
+            ? root.pressed_color
+            : icon_touch.has-hover
+                ? root.hover_color
+                : root.idle_color;
+    }
+
+    // Hit area capturing pointer clicks.
+    icon_touch := TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// =============================================================================
+// Helper Component: DropdownSurface
+// =============================================================================
+// The floating card panel container that holds dropdown menu items.
+component DropdownSurface inherits Rectangle {
+    width: Tokens.dropdown_surface_width;
+    border-radius: Tokens.dropdown_surface_radius;
+    background: Tokens.dropdown_surface;
+    border-width: 1px;
+    border-color: Tokens.dropdown_border;
+    clip: true;
+    drop-shadow-blur: 16px;
+    drop-shadow-color: Tokens.shadow_color;
+    drop-shadow-offset-y: 6px;
+}
+
+// =============================================================================
+// Helper Component: DropdownTrigger
+// =============================================================================
+// The titlebar text label button (e.g. "File", "View") that opens a dropdown menu.
+component DropdownTrigger inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    in property <float> ui_scale: 1.0;
+    callback clicked();
+
+    width: label_text.preferred-width + Tokens.dropdown_trigger_padding_x * 2;
+    height: Tokens.dropdown_trigger_hit_height;
+
+    label_text := Text {
+        x: Tokens.dropdown_trigger_padding_x;
+        y: 0px;
+        width: parent.width - Tokens.dropdown_trigger_padding_x * 2;
+        height: parent.height;
+        text: root.label;
+        font-family: Tokens.font_family;
+        color: trigger_touch.pressed
+            ? (root.active ? Tokens.accent_blue_hover : Tokens.text_primary)
+            : root.active
+                ? Tokens.accent_blue
+                : trigger_touch.has-hover
+                    ? Tokens.text_primary
+                    : Tokens.text_muted;
+        font-size: Tokens.titlebar_font_size * root.ui_scale;
+        font-weight: 400;
+        horizontal-alignment: left;
+        vertical-alignment: center;
+        overflow: clip;
+    }
+
+    trigger_touch := TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// =============================================================================
+// Helper Component: DropdownItem
+// =============================================================================
+// An individual row item inside a dropdown menu list.
+component DropdownItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> danger: false;
+    in property <float> ui_scale: 1.0;
+    callback clicked();
+
+    width: Tokens.dropdown_surface_width - Tokens.dropdown_surface_padding * 2;
+    height: Tokens.dropdown_item_height;
+    border-radius: 6px;
+    background: item_touch.pressed
+        ? Tokens.dropdown_surface_pressed
+        : item_touch.has-hover
+            ? Tokens.dropdown_surface_hover
+            : transparent;
+
+    item_label := Text {
+        x: Tokens.dropdown_item_padding_x;
+        y: 0px;
+        width: parent.width - Tokens.dropdown_item_padding_x * 2;
+        height: parent.height;
+        text: root.label;
+        font-family: Tokens.font_family;
+        color: item_touch.pressed || item_touch.has-hover
+            ? (root.danger ? Tokens.danger_red_hover : Tokens.text_primary)
+            : (root.danger ? Tokens.danger_red : Tokens.text_secondary);
+        font-size: Tokens.dropdown_font_size * root.ui_scale;
+        font-weight: 400;
+        horizontal-alignment: left;
+        vertical-alignment: center;
+        overflow: clip;
+    }
+
+    item_touch := TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// =============================================================================
+// Helper Component: DropdownSeparator
+// =============================================================================
+// A horizontal divider line placed between dropdown item groups.
+component DropdownSeparator inherits Rectangle {
+    width: Tokens.dropdown_surface_width - Tokens.dropdown_surface_padding * 2;
+    height: 1px;
+    background: Tokens.dropdown_separator;
+}
+
+// =============================================================================
+// Menu Component: FilesMenu
+// =============================================================================
+// Dropdown menu providing document and application file commands.
+component FilesMenu inherits Rectangle {
+    in property <bool> open: false;
+    in property <float> ui_scale: 1.0;
+    callback header_clicked();
+    callback dismiss();
+    callback new_document_clicked();
+    callback open_file_clicked();
+    callback save_file_clicked();
+    callback settings_clicked();
+    callback exit_clicked();
+
+    width: trigger.width;
+    height: Tokens.titlebar_height;
+
+    trigger := DropdownTrigger {
+        x: 0px;
+        y: (Tokens.titlebar_height - Tokens.dropdown_trigger_hit_height) / 2;
+        label: "File";
+        active: root.open;
+        ui_scale: root.ui_scale;
+        clicked => {
+            root.header_clicked();
+        }
+    }
+
+    panel := DropdownSurface {
+        x: 0px;
+        y: Tokens.titlebar_height;
+        width: Tokens.dropdown_surface_width;
+        height: 164px;
+        visible: root.open;
+
+        new_doc := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding;
+            label: "New Document";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.new_document_clicked();
+            }
+        }
+
+        open_doc := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + Tokens.dropdown_item_height + Tokens.dropdown_item_gap;
+            label: "Open File...";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.open_file_clicked();
+            }
+        }
+
+        save_doc := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 2;
+            label: "Save Document";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.save_file_clicked();
+            }
+        }
+
+        sep1 := DropdownSeparator {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 3;
+        }
+
+        settings := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 3 + 1px + Tokens.dropdown_item_gap;
+            label: "Settings...";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.settings_clicked();
+            }
+        }
+
+        exit_item := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 4 + 1px + Tokens.dropdown_item_gap;
+            label: "Exit";
+            danger: true;
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.exit_clicked();
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Menu Component: ViewMenu
+// =============================================================================
+// Dropdown menu controlling zoom levels and sidebar layout visibility.
+component ViewMenu inherits Rectangle {
+    in property <bool> open: false;
+    in property <float> ui_scale: 1.0;
+    callback header_clicked();
+    callback dismiss();
+    callback sidebar_toggle_requested();
+    callback zoom_in_requested();
+    callback zoom_out_requested();
+    callback actual_size_requested();
+
+    width: trigger.width;
+    height: Tokens.titlebar_height;
+
+    trigger := DropdownTrigger {
+        x: 0px;
+        y: (Tokens.titlebar_height - Tokens.dropdown_trigger_hit_height) / 2;
+        label: "View";
+        active: root.open;
+        ui_scale: root.ui_scale;
+        clicked => {
+            root.header_clicked();
+        }
+    }
+
+    panel := DropdownSurface {
+        x: 0px;
+        y: Tokens.titlebar_height;
+        width: Tokens.dropdown_surface_width;
+        height: 134px;
+        visible: root.open;
+
+        toggle_sidebar := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding;
+            label: "Toggle Sidebar";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.sidebar_toggle_requested();
+            }
+        }
+
+        sep1 := DropdownSeparator {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + Tokens.dropdown_item_height + Tokens.dropdown_item_gap;
+        }
+
+        zoom_in := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + Tokens.dropdown_item_height + Tokens.dropdown_item_gap + 1px + Tokens.dropdown_item_gap;
+            label: "Zoom In";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.zoom_in_requested();
+            }
+        }
+
+        zoom_out := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 2 + 1px + Tokens.dropdown_item_gap;
+            label: "Zoom Out";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.zoom_out_requested();
+            }
+        }
+
+        actual_size := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 3 + 1px + Tokens.dropdown_item_gap;
+            label: "Actual Size";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.actual_size_requested();
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Menu Component: WindowMenu
+// =============================================================================
+// Dropdown menu exposing standard window management actions.
+component WindowMenu inherits Rectangle {
+    in property <bool> open: false;
+    in property <float> ui_scale: 1.0;
+    callback header_clicked();
+    callback dismiss();
+    callback minimize_requested();
+    callback maximize_requested();
+    callback close_window_requested();
+
+    width: trigger.width;
+    height: Tokens.titlebar_height;
+
+    trigger := DropdownTrigger {
+        x: 0px;
+        y: (Tokens.titlebar_height - Tokens.dropdown_trigger_hit_height) / 2;
+        label: "Window";
+        active: root.open;
+        ui_scale: root.ui_scale;
+        clicked => {
+            root.header_clicked();
+        }
+    }
+
+    panel := DropdownSurface {
+        x: 0px;
+        y: Tokens.titlebar_height;
+        width: Tokens.dropdown_surface_width;
+        height: 104px;
+        visible: root.open;
+
+        minimize_item := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding;
+            label: "Minimize";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.minimize_requested();
+            }
+        }
+
+        maximize_item := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + Tokens.dropdown_item_height + Tokens.dropdown_item_gap;
+            label: "Maximize / Restore";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.maximize_requested();
+            }
+        }
+
+        sep1 := DropdownSeparator {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 2;
+        }
+
+        close_item := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 2 + 1px + Tokens.dropdown_item_gap;
+            label: "Close Window";
+            danger: true;
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.close_window_requested();
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Menu Component: HelpMenu
+// =============================================================================
+// Dropdown menu offering documentation links and application info.
+component HelpMenu inherits Rectangle {
+    in property <bool> open: false;
+    in property <float> ui_scale: 1.0;
+    callback header_clicked();
+    callback dismiss();
+    callback documentation_requested();
+    callback report_bug_requested();
+    callback about_requested();
+
+    width: trigger.width;
+    height: Tokens.titlebar_height;
+
+    trigger := DropdownTrigger {
+        x: 0px;
+        y: (Tokens.titlebar_height - Tokens.dropdown_trigger_hit_height) / 2;
+        label: "Help";
+        active: root.open;
+        ui_scale: root.ui_scale;
+        clicked => {
+            root.header_clicked();
+        }
+    }
+
+    panel := DropdownSurface {
+        x: 0px;
+        y: Tokens.titlebar_height;
+        width: Tokens.dropdown_surface_width;
+        height: 104px;
+        visible: root.open;
+
+        docs_item := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding;
+            label: "Documentation";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.documentation_requested();
+            }
+        }
+
+        bug_item := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + Tokens.dropdown_item_height + Tokens.dropdown_item_gap;
+            label: "Report Issue";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.report_bug_requested();
+            }
+        }
+
+        sep1 := DropdownSeparator {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 2;
+        }
+
+        about_item := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 2 + 1px + Tokens.dropdown_item_gap;
+            label: "About Oryn";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.about_requested();
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Helper Component: NavigationControls
+// =============================================================================
+// Undo and Redo titlebar action buttons using Lucide icons.
+component NavigationControls inherits Rectangle {
+    callback undo_clicked();
+    callback redo_clicked();
+
+    width: Tokens.titlebar_navigation_width;
+    height: Tokens.titlebar_icon_hit_height;
+
+    undo_button := TitlebarIconButton {
+        x: 0px;
+        y: 0px;
+        icon: @image-url("../../assets/icons/action/undo.svg");
+        clicked => {
+            root.undo_clicked();
+        }
+    }
+
+    redo_button := TitlebarIconButton {
+        x: Tokens.titlebar_icon_hit_width + Tokens.titlebar_button_gap;
+        y: 0px;
+        icon: @image-url("../../assets/icons/action/redo.svg");
+        clicked => {
+            root.redo_clicked();
+        }
+    }
+}
+
+// =============================================================================
+// Helper Component: WindowActions
+// =============================================================================
+// Right-hand window control buttons (Minimize, Maximize/Restore, Close).
+component WindowActions inherits Rectangle {
+    in property <bool> is_maximized: false;
+    callback minimize_requested();
+    callback maximize_requested();
+    callback close_window_requested();
+
+    width: Tokens.titlebar_actions_width;
+    height: Tokens.titlebar_icon_hit_height;
+
+    minimize_button := TitlebarIconButton {
+        x: 0px;
+        y: 0px;
+        icon: @image-url("../../assets/icons/action/minimize.svg");
+        show_surface: true;
+        clicked => {
+            root.minimize_requested();
+        }
+    }
+
+    maximize_button := TitlebarIconButton {
+        x: Tokens.titlebar_icon_hit_width + Tokens.titlebar_button_gap;
+        y: 0px;
+        icon: root.is_maximized
+            ? @image-url("../../assets/icons/action/unmaxmize.svg")
+            : @image-url("../../assets/icons/action/maximize.svg");
+        show_surface: true;
+        clicked => {
+            root.maximize_requested();
+        }
+    }
+
+    close_button := TitlebarIconButton {
+        x: (Tokens.titlebar_icon_hit_width + Tokens.titlebar_button_gap) * 2;
+        y: 0px;
+        icon: @image-url("../../assets/icons/action/close.svg");
+        idle_color: Tokens.danger_red;
+        hover_color: Tokens.danger_red_hover;
+        pressed_color: Tokens.danger_red_hover;
+        show_surface: true;
+        surface_hover_color: #4f2026;
+        surface_pressed_color: #5d2630;
+        clicked => {
+            root.close_window_requested();
+        }
+    }
+}
+
+// =============================================================================
+// Exported Main Component: Titlebar
+// =============================================================================
+// Top-level custom titlebar component for Oryn window chrome.
+export component Titlebar inherits Rectangle {
+    // Current active menu index (0 = none open, 1 = File, 2 = View, 3 = Window, 4 = Help)
+    in-out property <int> active_menu: 0;
+    
+    // Window state indicators
+    in property <bool> is_maximized: false;
+    in property <float> ui_scale: 1.0;
+    in-out property <bool> sidebar_open: true;
+    
+    // Visibility flags
+    in property <bool> show_navigation: true;
+    in property <bool> show_menus: true;
+
+    // Callbacks emitted to host window / Rust handler
+    callback sidebar_toggle_requested();
+    callback minimize_requested();
+    callback maximize_requested();
+    callback close_window_requested();
+    callback exit_requested();
+    callback drag_window_requested();
+    callback undo_requested();
+    callback redo_requested();
+    callback new_document_requested();
+    callback open_file_requested();
+    callback save_file_requested();
+    callback settings_requested();
+    callback zoom_in_requested();
+    callback zoom_out_requested();
+    callback actual_size_requested();
+    callback documentation_requested();
+    callback report_bug_requested();
+    callback about_requested();
+
+    height: Tokens.titlebar_height;
+    background: Tokens.titlebar_background;
+
+    // -------------------------------------------------------------------------
+    // Invisible Window Drag Touch Region
+    // -------------------------------------------------------------------------
+    // Positioned behind visible titlebar buttons. Allows clicking & dragging
+    // anywhere on empty titlebar space to move the window.
+    // Dynamically removes top resize offset when window is maximized/fullscreen.
+    drag_area := TouchArea {
+        x: 0px;
+        y: root.is_maximized ? 0px : Tokens.window_resize_border_width;
+        width: parent.width;
+        height: root.is_maximized ? parent.height : parent.height - Tokens.window_resize_border_width;
+        mouse-cursor: default;
+        pointer-event(event) => {
+            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                root.drag_window_requested();
+            }
+        }
+        double-clicked => {
+            root.maximize_requested();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Left Brand Logo & Sidebar Toggle Switcher
+    // -------------------------------------------------------------------------
+    // Displays Oryn brand logo by default. Switches to sidebar-opened / sidebar-closed
+    // icon on hover. Clicking toggles sidebar visibility.
+    brand_container := Rectangle {
+        x: Tokens.titlebar_padding_x;
+        y: (Tokens.titlebar_height - Tokens.titlebar_logo_size) / 2;
+        width: Tokens.titlebar_logo_size;
+        height: Tokens.titlebar_logo_size;
+
+        logo_image := Image {
+            width: 100%;
+            height: 100%;
+            // Show sidebar toggle icon on hover, default to Oryn brand icon
+            source: brand_touch.has-hover
+                ? (root.sidebar_open 
+                    ? @image-url("../../assets/icons/action/sidebar-opened.svg")
+                    : @image-url("../../assets/icons/action/sidebar-closed.svg"))
+                : @image-url("../../assets/brand/icon.svg");
+            
+            // Highlight action icon on hover with primary text color
+            colorize: brand_touch.has-hover ? Tokens.text_primary : transparent;
+            image-fit: contain;
+        }
+
+        brand_touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => {
+                root.sidebar_open = !root.sidebar_open;
+                root.sidebar_toggle_requested();
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Navigation Controls Container (Undo & Redo)
+    // -------------------------------------------------------------------------
+    navigation := NavigationControls {
+        x: brand_container.x + brand_container.width + 8px;
+        y: (Tokens.titlebar_height - Tokens.titlebar_icon_hit_height) / 2;
+        visible: root.show_navigation;
+        undo_clicked => { root.undo_requested(); }
+        redo_clicked => { root.redo_requested(); }
+    }
+
+    // -------------------------------------------------------------------------
+    // Dropdown Menus Layout
+    // -------------------------------------------------------------------------
+    files_menu := FilesMenu {
+        x: navigation.x + navigation.width + 10px;
+        y: 0px;
+        open: root.active_menu == 1;
+        ui_scale: root.ui_scale;
+        visible: root.show_menus;
+        header_clicked => {
+            root.active_menu = root.active_menu == 1 ? 0 : 1;
+        }
+        dismiss => {
+            root.active_menu = 0;
+        }
+        new_document_clicked => { root.new_document_requested(); }
+        open_file_clicked => { root.open_file_requested(); }
+        save_file_clicked => { root.save_file_requested(); }
+        settings_clicked => { root.settings_requested(); }
+        exit_clicked => { root.exit_requested(); }
+    }
+
+    view_menu := ViewMenu {
+        x: files_menu.x + files_menu.width + Tokens.titlebar_menu_gap;
+        y: 0px;
+        open: root.active_menu == 2;
+        ui_scale: root.ui_scale;
+        visible: root.show_menus;
+        header_clicked => {
+            root.active_menu = root.active_menu == 2 ? 0 : 2;
+        }
+        dismiss => {
+            root.active_menu = 0;
+        }
+        sidebar_toggle_requested => {
+            root.sidebar_open = !root.sidebar_open;
+            root.sidebar_toggle_requested();
+        }
+        zoom_in_requested => { root.zoom_in_requested(); }
+        zoom_out_requested => { root.zoom_out_requested(); }
+        actual_size_requested => { root.actual_size_requested(); }
+    }
+
+    window_menu := WindowMenu {
+        x: view_menu.x + view_menu.width + Tokens.titlebar_menu_gap;
+        y: 0px;
+        open: root.active_menu == 3;
+        ui_scale: root.ui_scale;
+        visible: root.show_menus;
+        header_clicked => {
+            root.active_menu = root.active_menu == 3 ? 0 : 3;
+        }
+        dismiss => {
+            root.active_menu = 0;
+        }
+        minimize_requested => { root.minimize_requested(); }
+        maximize_requested => { root.maximize_requested(); }
+        close_window_requested => { root.close_window_requested(); }
+    }
+
+    help_menu := HelpMenu {
+        x: window_menu.x + window_menu.width + Tokens.titlebar_menu_gap;
+        y: 0px;
+        open: root.active_menu == 4;
+        ui_scale: root.ui_scale;
+        visible: root.show_menus;
+        header_clicked => {
+            root.active_menu = root.active_menu == 4 ? 0 : 4;
+        }
+        dismiss => {
+            root.active_menu = 0;
+        }
+        documentation_requested => { root.documentation_requested(); }
+        report_bug_requested => { root.report_bug_requested(); }
+        about_requested => { root.about_requested(); }
+    }
+
+    // -------------------------------------------------------------------------
+    // Right Window Controls (Minimize, Maximize/Restore, Close)
+    // -------------------------------------------------------------------------
+    actions := WindowActions {
+        x: parent.width - Tokens.titlebar_actions_width - Tokens.titlebar_padding_x;
+        y: (Tokens.titlebar_height - Tokens.titlebar_icon_hit_height) / 2;
+        is_maximized: root.is_maximized;
+        minimize_requested => {
+            root.minimize_requested();
+        }
+        maximize_requested => {
+            root.maximize_requested();
+        }
+        close_window_requested => {
+            root.close_window_requested();
+        }
+    }
+}

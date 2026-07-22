@@ -8,7 +8,7 @@ repository = "https://github.com/lukagray-dev/oryn"
 edition = "2021"
 
 [dependencies]
-slint = "1.16.1"
+slint = { version = "1.16.1", features = ["unstable-winit-030", "renderer-skia"] }
 
 [build-dependencies]
 slint-build = "1.16.1"
