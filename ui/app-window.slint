@@ -60,14 +60,24 @@ export component AppWindow inherits Window {
     callback drag_window_requested();
     callback undo_requested();
     callback redo_requested();
+
     callback new_document_requested();
     callback open_project_requested();
     callback new_project_document_requested(string, int);
+
     callback project_document_clicked(string, int, int);
     callback general_document_clicked(string, int);
+
     callback delete_general_document_requested(string, int);
     callback delete_project_document_requested(string, int, int);
     callback delete_project_requested(string, int);
+
+    callback search_query_changed(string);
+    callback rename_requested(string /* target_path */, string /* new_name */, string /* target_type */);
+    callback move_to_requested(string /* file_path */);
+    callback pin_document_requested(string /* file_path */);
+    callback pin_project_requested(string /* project_workspace */);
+
     callback open_file_requested();
     callback save_file_requested();
     callback settings_requested();
@@ -103,11 +113,48 @@ export component AppWindow inherits Window {
             new_chat_clicked => { root.new_document_requested(); }
             new_project_clicked => { root.open_project_requested(); }
             new_session_clicked(proj_path, proj_idx) => { root.new_project_document_requested(proj_path, proj_idx); }
+            
             project_conversation_clicked(file_path, proj_idx, conv_idx) => { root.project_document_clicked(file_path, proj_idx, conv_idx); }
             chat_clicked(file_path, chat_idx) => { root.general_document_clicked(file_path, chat_idx); }
+
             delete_chat_clicked(file_path, chat_idx) => { root.delete_general_document_requested(file_path, chat_idx); }
             delete_conversation_clicked(file_path, proj_idx, conv_idx) => { root.delete_project_document_requested(file_path, proj_idx, conv_idx); }
             delete_project_clicked(proj_path, proj_idx) => { root.delete_project_requested(proj_path, proj_idx); }
+
+            search_query_changed(query) => { root.search_query_changed(query); }
+            search_cancelled => { root.search_query_changed(""); }
+
+            rename_chat_saved(file_path, new_name, _chat_idx) => {
+                root.rename_requested(file_path, new_name, "document");
+            }
+
+            rename_conversation_saved(file_path, new_name, _proj_idx, _conv_idx) => {
+                root.rename_requested(file_path, new_name, "document");
+            }
+
+            rename_project_saved(proj_path, new_name, _proj_idx) => {
+                root.rename_requested(proj_path, new_name, "project");
+            }
+
+            move_to_chat_clicked(file_path, chat_idx) => {
+                root.move_to_requested(file_path);
+            }
+
+            move_to_conversation_clicked(file_path, proj_idx, conv_idx) => {
+                root.move_to_requested(file_path);
+            }
+
+            pin_chat_clicked(file_path, chat_idx) => {
+                root.pin_document_requested(file_path);
+            }
+
+            pin_conversation_clicked(file_path, proj_idx, conv_idx) => {
+                root.pin_document_requested(file_path);
+            }
+
+            pin_project_clicked(proj_path, proj_idx) => {
+                root.pin_project_requested(proj_path);
+            }
         }
 
         // ---------------------------------------------------------------------

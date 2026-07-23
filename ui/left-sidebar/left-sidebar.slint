@@ -9,6 +9,7 @@
 // 4. Edge Resize Handle: Drag handle on the right edge allowing users to resize the sidebar width.
 // 5. Matched Theme: Uses `Tokens.titlebar_background` (#191919) matching the titlebar.
 // 6. Clean Edge: No vertical separator line.
+// 7. Inline Renaming: Click 'Rename' on any document or project row to edit title directly in the sidebar.
 
 import { Tokens } from "../shared/tokens.slint";
 
@@ -19,12 +20,14 @@ import { Tokens } from "../shared/tokens.slint";
 export struct SidebarConversation {
     id: string,
     title: string,
+    is_pinned: bool,
 }
 
 // Struct representing a project workspace grouping multiple documents.
 export struct SidebarProject {
     name: string,
     workspace: string,
+    is_pinned: bool,
     conversations: [SidebarConversation],
 }
 
@@ -285,17 +288,19 @@ component Search inherits Rectangle {
 // =============================================================================
 // Sidebar Section Component: Conversation Item Row
 // =============================================================================
-// Individual document item with title, hover highlights, and context menu popup.
+// Individual document item with title, hover highlights, inline title editing, pin indicator, and context menu.
 component Conversation inherits Rectangle {
     in property <string> title: "Untitled Document";
     in property <bool> is_active: false;
+    in property <bool> is_pinned: false;
+    in-out property <bool> is_renaming: false;
+    in-out property <string> edit_title: root.title;
 
     callback clicked();
     callback share_clicked();
-    callback rename_clicked();
+    callback rename_saved(string);
     callback move_to_clicked();
     callback pin_clicked();
-    callback fork_clicked();
     callback delete_clicked();
     
     height: 32px;
@@ -310,8 +315,18 @@ component Conversation inherits Rectangle {
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 36px;
+        spacing: 6px;
         
-        Text {
+        if (root.is_pinned) : Image {
+            source: @image-url("../../assets/icons/sidebar/pin.svg");
+            width: 12px;
+            height: 12px;
+            y: (parent.height - self.height) / 2;
+            colorize: Tokens.accent_blue;
+            image-fit: contain;
+        }
+
+        if (!root.is_renaming) : Text {
             text: root.title;
             font-family: Tokens.font_family;
             color: is_active ? Tokens.text_primary : Tokens.text_secondary;
@@ -319,10 +334,32 @@ component Conversation inherits Rectangle {
             vertical-alignment: center;
             horizontal-alignment: left;
             overflow: elide;
+            horizontal-stretch: 1;
+        }
+
+        if (root.is_renaming) : edit_input := TextInput {
+            text <=> root.edit_title;
+            font-family: Tokens.font_family;
+            color: Tokens.text_primary;
+            font-size: Tokens.body_font_size;
+            vertical-alignment: center;
+            single-line: true;
+            horizontal-stretch: 1;
+
+            init => {
+                self.focus();
+                self.select-all();
+            }
+
+            accepted => {
+                root.is_renaming = false;
+                root.rename_saved(self.text);
+            }
         }
     }
     
     touch_area := TouchArea {
+        enabled: !root.is_renaming;
         clicked => {
             root.clicked();
         }
@@ -335,7 +372,7 @@ component Conversation inherits Rectangle {
         height: 24px;
         border-radius: 4px;
         background: three_dots_touch.has-hover ? Tokens.dropdown_surface_hover : transparent;
-        visible: touch_area.has-hover || three_dots_touch.has-hover || root.is_active;
+        visible: !root.is_renaming && (touch_area.has-hover || three_dots_touch.has-hover || root.is_active);
         
         animate background { duration: 100ms; }
 
@@ -385,7 +422,8 @@ component Conversation inherits Rectangle {
                     icon: @image-url("../../assets/icons/sidebar/pencil.svg");
                     clicked => {
                         menu_panel.close();
-                        root.rename_clicked();
+                        root.edit_title = root.title;
+                        root.is_renaming = true;
                     }
                 }
                 IconDropdownItem {
@@ -397,19 +435,11 @@ component Conversation inherits Rectangle {
                     }
                 }
                 IconDropdownItem {
-                    label: "Pin";
+                    label: root.is_pinned ? "Unpin" : "Pin";
                     icon: @image-url("../../assets/icons/sidebar/pin.svg");
                     clicked => {
                         menu_panel.close();
                         root.pin_clicked();
-                    }
-                }
-                IconDropdownItem {
-                    label: "Fork";
-                    icon: @image-url("../../assets/icons/sidebar/git-fork.svg");
-                    clicked => {
-                        menu_panel.close();
-                        root.fork_clicked();
                     }
                 }
                 SidebarDropdownSeparator {}
@@ -436,17 +466,23 @@ component Projects inherits Rectangle {
     in-out property <int> active_project_index: -1;
     in-out property <int> active_conversation_index: -1;
     in-out property <bool> is_expanded: true;
+    in-out property <int> renaming_project_index: -1;
+    in-out property <string> project_edit_name: "";
 
     callback conversation_clicked(string, int, int);
     callback delete_conversation_clicked(string, int, int);
+    callback rename_conversation_saved(string, string, int, int);
+    callback move_to_conversation_clicked(string, int, int);
+    callback pin_conversation_clicked(string, int, int);
+
     callback header_clicked();
     callback new_project_clicked();
     callback new_session_clicked(string, int);
     callback share_project_clicked(int);
-    callback rename_project_clicked(int);
+    callback rename_project_saved(string, string, int);
     callback project_settings_clicked(int);
     callback project_home_clicked(int);
-    callback pin_project_clicked(int);
+    callback pin_project_clicked(string, int);
     callback delete_project_clicked(string, int);
 
     height: content.preferred-height;
@@ -553,7 +589,7 @@ component Projects inherits Rectangle {
                     HorizontalLayout {
                         padding-left: 12px;
                         padding-right: 84px;
-                        spacing: 8px;
+                        spacing: 6px;
 
                         Image {
                             source: @image-url("../../assets/icons/sidebar/projects.svg");
@@ -564,7 +600,16 @@ component Projects inherits Rectangle {
                             image-fit: contain;
                         }
 
-                        Text {
+                        if (project.is_pinned) : Image {
+                            source: @image-url("../../assets/icons/sidebar/pin.svg");
+                            width: 12px;
+                            height: 12px;
+                            y: (parent.height - self.height) / 2;
+                            colorize: Tokens.accent_blue;
+                            image-fit: contain;
+                        }
+
+                        if (root.renaming_project_index != project_index) : Text {
                             text: project.name;
                             font-family: Tokens.font_family;
                             color: Tokens.text_secondary;
@@ -573,9 +618,30 @@ component Projects inherits Rectangle {
                             overflow: elide;
                             horizontal-stretch: 1;
                         }
+
+                        if (root.renaming_project_index == project_index) : proj_edit_input := TextInput {
+                            text <=> root.project_edit_name;
+                            font-family: Tokens.font_family;
+                            color: Tokens.text_primary;
+                            font-size: Tokens.body_font_size;
+                            vertical-alignment: center;
+                            single-line: true;
+                            horizontal-stretch: 1;
+
+                            init => {
+                                self.focus();
+                                self.select-all();
+                            }
+
+                            accepted => {
+                                root.renaming_project_index = -1;
+                                root.rename_project_saved(project.workspace, self.text, project_index);
+                            }
+                        }
                     }
 
                     project_touch := TouchArea {
+                        enabled: root.renaming_project_index != project_index;
                         clicked => {
                             if root.active_project_index == project_index {
                                 root.active_project_index = -1;
@@ -592,7 +658,7 @@ component Projects inherits Rectangle {
                         height: 22px;
                         border-radius: 4px;
                         background: new_session_touch.has-hover ? Tokens.dropdown_surface_hover : transparent;
-                        visible: project_touch.has-hover || new_session_touch.has-hover || root.active_project_index == project_index;
+                        visible: root.renaming_project_index != project_index && (project_touch.has-hover || new_session_touch.has-hover || root.active_project_index == project_index);
                         animate background { duration: 100ms; }
 
                         Image {
@@ -620,7 +686,7 @@ component Projects inherits Rectangle {
                         height: 22px;
                         border-radius: 4px;
                         background: three_dots_touch.has-hover ? Tokens.dropdown_surface_hover : transparent;
-                        visible: project_touch.has-hover || three_dots_touch.has-hover || root.active_project_index == project_index;
+                        visible: root.renaming_project_index != project_index && (project_touch.has-hover || three_dots_touch.has-hover || root.active_project_index == project_index);
                         animate background { duration: 100ms; }
 
                         Image {
@@ -681,31 +747,16 @@ component Projects inherits Rectangle {
                                     icon: @image-url("../../assets/icons/sidebar/pencil.svg");
                                     clicked => {
                                         project_menu_panel.close();
-                                        root.rename_project_clicked(project_index);
+                                        root.project_edit_name = project.name;
+                                        root.renaming_project_index = project_index;
                                     }
                                 }
                                 IconDropdownItem {
-                                    label: "Settings";
-                                    icon: @image-url("../../assets/icons/sidebar/settings.svg");
-                                    clicked => {
-                                        project_menu_panel.close();
-                                        root.project_settings_clicked(project_index);
-                                    }
-                                }
-                                IconDropdownItem {
-                                    label: "Home";
-                                    icon: @image-url("../../assets/icons/sidebar/home.svg");
-                                    clicked => {
-                                        project_menu_panel.close();
-                                        root.project_home_clicked(project_index);
-                                    }
-                                }
-                                IconDropdownItem {
-                                    label: "Pin";
+                                    label: project.is_pinned ? "Unpin" : "Pin";
                                     icon: @image-url("../../assets/icons/sidebar/pin.svg");
                                     clicked => {
                                         project_menu_panel.close();
-                                        root.pin_project_clicked(project_index);
+                                        root.pin_project_clicked(project.workspace, project_index);
                                     }
                                 }
                                 SidebarDropdownSeparator {}
@@ -730,10 +781,20 @@ component Projects inherits Rectangle {
                     for conversation[conv_index] in project.conversations: Conversation {
                         title: conversation.title;
                         is_active: conv_index == root.active_conversation_index;
+                        is_pinned: conversation.is_pinned;
 
                         clicked => {
                             root.active_conversation_index = conv_index;
                             root.conversation_clicked(conversation.id, project_index, conv_index);
+                        }
+                        rename_saved(new_title) => {
+                            root.rename_conversation_saved(conversation.id, new_title, project_index, conv_index);
+                        }
+                        move_to_clicked => {
+                            root.move_to_conversation_clicked(conversation.id, project_index, conv_index);
+                        }
+                        pin_clicked => {
+                            root.pin_conversation_clicked(conversation.id, project_index, conv_index);
                         }
                         delete_clicked => {
                             root.delete_conversation_clicked(conversation.id, project_index, conv_index);
@@ -755,6 +816,9 @@ component Documents inherits Rectangle {
     
     callback document_clicked(string, int);
     callback delete_document_clicked(string, int);
+    callback rename_document_saved(string, string, int);
+    callback move_to_document_clicked(string, int);
+    callback pin_document_clicked(string, int);
     callback header_clicked();
     callback new_document_clicked();
 
@@ -851,10 +915,20 @@ component Documents inherits Rectangle {
             for document[index] in root.document_titles : Conversation {
                 title: document.title;
                 is_active: index == root.active_chat_index;
+                is_pinned: document.is_pinned;
 
                 clicked => {
                     root.active_chat_index = index;
                     root.document_clicked(document.id, index);
+                }
+                rename_saved(new_title) => {
+                    root.rename_document_saved(document.id, new_title, index);
+                }
+                move_to_clicked => {
+                    root.move_to_document_clicked(document.id, index);
+                }
+                pin_clicked => {
+                    root.pin_document_clicked(document.id, index);
                 }
                 delete_clicked => {
                     root.delete_document_clicked(document.id, index);
@@ -869,7 +943,7 @@ component Documents inherits Rectangle {
                     alignment: center;
 
                     Text {
-                        text: "No documents yet";
+                        text: "No documents found";
                         font-family: Tokens.font_family;
                         color: Tokens.text_muted;
                         font-size: Tokens.body_font_size - 1px;
@@ -966,11 +1040,22 @@ export component Sidebar inherits Rectangle {
     callback search_query_changed(string);
     callback search_cancelled();
     callback settings_clicked();
+
     callback project_conversation_clicked(string, int, int);
+    callback delete_conversation_clicked(string, int, int);
+    callback rename_conversation_saved(string, string, int, int);
+    callback move_to_conversation_clicked(string, int, int);
+    callback pin_conversation_clicked(string, int, int);
+
     callback chat_clicked(string, int);
     callback delete_chat_clicked(string, int);
-    callback delete_conversation_clicked(string, int, int);
+    callback rename_chat_saved(string, string, int);
+    callback move_to_chat_clicked(string, int);
+    callback pin_chat_clicked(string, int);
+
     callback delete_project_clicked(string, int);
+    callback rename_project_saved(string, string, int);
+    callback pin_project_clicked(string, int);
     callback new_session_clicked(string, int);
     callback width_changed(length);
 
@@ -1039,8 +1124,23 @@ export component Sidebar inherits Rectangle {
                         delete_conversation_clicked(session_id, proj_idx, conv_idx) => {
                             root.delete_conversation_clicked(session_id, proj_idx, conv_idx);
                         }
+                        rename_conversation_saved(session_id, new_title, proj_idx, conv_idx) => {
+                            root.rename_conversation_saved(session_id, new_title, proj_idx, conv_idx);
+                        }
+                        move_to_conversation_clicked(session_id, proj_idx, conv_idx) => {
+                            root.move_to_conversation_clicked(session_id, proj_idx, conv_idx);
+                        }
+                        pin_conversation_clicked(session_id, proj_idx, conv_idx) => {
+                            root.pin_conversation_clicked(session_id, proj_idx, conv_idx);
+                        }
                         delete_project_clicked(proj_path, proj_idx) => {
                             root.delete_project_clicked(proj_path, proj_idx);
+                        }
+                        rename_project_saved(proj_path, new_name, proj_idx) => {
+                            root.rename_project_saved(proj_path, new_name, proj_idx);
+                        }
+                        pin_project_clicked(proj_path, proj_idx) => {
+                            root.pin_project_clicked(proj_path, proj_idx);
                         }
                         new_session_clicked(proj_path, proj_idx) => {
                             root.new_session_clicked(proj_path, proj_idx);
@@ -1059,6 +1159,15 @@ export component Sidebar inherits Rectangle {
                         }
                         delete_document_clicked(session_id, chat_idx) => {
                             root.delete_chat_clicked(session_id, chat_idx);
+                        }
+                        rename_document_saved(session_id, new_title, chat_idx) => {
+                            root.rename_chat_saved(session_id, new_title, chat_idx);
+                        }
+                        move_to_document_clicked(session_id, chat_idx) => {
+                            root.move_to_chat_clicked(session_id, chat_idx);
+                        }
+                        pin_document_clicked(session_id, chat_idx) => {
+                            root.pin_chat_clicked(session_id, chat_idx);
                         }
                         new_document_clicked => {
                             root.new_chat_clicked();
