@@ -6,11 +6,13 @@
 // with the `styled-text` property type for native rich inline formatting.
 
 import { Tokens } from "../shared/tokens.slint";
+import { MarkdownTableRow } from "./types.slint";
 import { MarkdownHeading } from "./heading.slint";
 import { MarkdownParagraph } from "./paragraph.slint";
 import { MarkdownList } from "./list.slint";
 import { MarkdownRule } from "./rule.slint";
 import { MarkdownSpacer } from "./spacer.slint";
+import { MarkdownTable } from "./table.slint";
 
 // Enum specifying the block type of a Markdown AST element
 export enum MarkdownBlockType {
@@ -19,6 +21,7 @@ export enum MarkdownBlockType {
     ListItem,
     Rule,
     Spacer,
+    Table,
 }
 
 // Struct representing a single parsed Markdown block element.
@@ -36,6 +39,8 @@ export struct MarkdownElement {
     is_task: bool,
     is_checked: bool,
     depth: int,
+    // Table rows for MarkdownBlockType.Table
+    rows: [MarkdownTableRow],
 }
 
 // Main exported view component rendering the array of Markdown blocks
@@ -73,6 +78,10 @@ export component MarkdownView inherits VerticalLayout {
 
         if (element.block_type == MarkdownBlockType.Spacer) : MarkdownSpacer {
             level: element.level;
+        }
+
+        if (element.block_type == MarkdownBlockType.Table) : MarkdownTable {
+            rows: element.rows;
         }
     }
 }

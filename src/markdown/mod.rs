@@ -17,11 +17,12 @@ pub mod list;
 pub mod paragraph;
 pub mod rule;
 pub mod spacer;
+pub mod table;
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
-use slint::{SharedString, StyledText};
+use slint::{ModelRc, SharedString, StyledText, VecModel};
 
-use crate::{MarkdownBlockType, MarkdownElement};
+use crate::{MarkdownBlockType, MarkdownElement, MarkdownTableCell, MarkdownTableRow};
 
 #[derive(Debug, Clone)]
 struct ListState {
@@ -41,6 +42,33 @@ struct ItemFrame {
     rich_md: String,
     // Plain text (task status, index matching, etc.)
     plain_text: String,
+}
+
+/// Helper struct for accumulating table parsing state across pulldown-cmark events
+#[derive(Default)]
+struct TableState {
+    alignments: Vec<i32>,
+    rows: Vec<MarkdownTableRow>,
+    current_row_cells: Vec<MarkdownTableCell>,
+    is_current_row_header: bool,
+    current_cell_align_idx: usize,
+    in_table: bool,
+    in_table_head: bool,
+    in_table_cell: bool,
+}
+
+impl TableState {
+    fn flush_current_row(&mut self) {
+        if !self.current_row_cells.is_empty() {
+            let cells_model: ModelRc<MarkdownTableCell> =
+                ModelRc::new(VecModel::from(self.current_row_cells.clone()));
+            self.rows.push(MarkdownTableRow {
+                cells: cells_model,
+                is_header: self.is_current_row_header,
+            });
+            self.current_row_cells.clear();
+        }
+    }
 }
 
 /// Converts a Markdown string into a Slint `StyledText` value.
@@ -71,6 +99,9 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
     let mut list_stack: Vec<ListState> = Vec::new();
     let mut item_stack: Vec<ItemFrame> = Vec::new();
 
+    // Table parsing state
+    let mut table_state = TableState::default();
+
     // Track end position of previous top-level block to compute blank line gaps
     let mut last_top_level_pos: usize = 0;
 
@@ -90,6 +121,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                     is_task: false,
                     is_checked: false,
                     depth: 0,
+                    rows: ModelRc::default(),
                 });
             }
         }
@@ -99,7 +131,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
         match event {
             // ---- Headings ----
             Event::Start(Tag::Heading { level, .. }) => {
-                if list_stack.is_empty() {
+                if list_stack.is_empty() && !table_state.in_table {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                 }
                 is_in_heading = true;
@@ -121,6 +153,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                             is_task: false,
                             is_checked: false,
                             depth: 0,
+                            rows: ModelRc::default(),
                         });
                         last_top_level_pos = range.end;
                     }
@@ -130,14 +163,14 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
 
             // ---- Paragraphs ----
             Event::Start(Tag::Paragraph) => {
-                if list_stack.is_empty() {
+                if list_stack.is_empty() && !table_state.in_table {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                     is_in_paragraph = true;
                     global_rich_md.clear();
                 }
             }
             Event::End(TagEnd::Paragraph) => {
-                if is_in_paragraph && list_stack.is_empty() {
+                if is_in_paragraph && list_stack.is_empty() && !table_state.in_table {
                     is_in_paragraph = false;
                     let md = paragraph::clean_paragraph_text(global_rich_md.trim());
                     if !md.is_empty() {
@@ -151,6 +184,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                             is_task: false,
                             is_checked: false,
                             depth: 0,
+                            rows: ModelRc::default(),
                         });
                         last_top_level_pos = range.end;
                     }
@@ -160,7 +194,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
 
             // ---- Horizontal Rule (---) ----
             Event::Rule => {
-                if list_stack.is_empty() {
+                if list_stack.is_empty() && !table_state.in_table {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                     elements.push(MarkdownElement {
                         block_type: MarkdownBlockType::Rule,
@@ -172,14 +206,89 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                         is_task: false,
                         is_checked: false,
                         depth: 0,
+                        rows: ModelRc::default(),
                     });
                     last_top_level_pos = range.end;
                 }
             }
 
+            // ---- Tables ----
+            Event::Start(Tag::Table(alignments)) => {
+                if list_stack.is_empty() {
+                    check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
+                }
+                table_state.in_table = true;
+                table_state.alignments = alignments.into_iter().map(table::alignment_to_int).collect();
+                table_state.rows.clear();
+            }
+            Event::End(TagEnd::Table) => {
+                if table_state.in_table {
+                    table_state.flush_current_row();
+                    table_state.in_table = false;
+                    let rows_model: ModelRc<MarkdownTableRow> =
+                        ModelRc::new(VecModel::from(table_state.rows.clone()));
+                    elements.push(MarkdownElement {
+                        block_type: MarkdownBlockType::Table,
+                        text: SharedString::default(),
+                        rich_text: to_styled_text(""),
+                        level: 0,
+                        is_ordered: false,
+                        prefix: SharedString::default(),
+                        is_task: false,
+                        is_checked: false,
+                        depth: 0,
+                        rows: rows_model,
+                    });
+                    last_top_level_pos = range.end;
+                }
+            }
+
+            Event::Start(Tag::TableHead) => {
+                table_state.in_table_head = true;
+                table_state.is_current_row_header = true;
+                table_state.current_row_cells.clear();
+                table_state.current_cell_align_idx = 0;
+            }
+            Event::End(TagEnd::TableHead) => {
+                table_state.flush_current_row();
+                table_state.in_table_head = false;
+            }
+
+            Event::Start(Tag::TableRow) => {
+                table_state.current_row_cells.clear();
+                table_state.is_current_row_header = table_state.in_table_head;
+                table_state.current_cell_align_idx = 0;
+            }
+            Event::End(TagEnd::TableRow) => {
+                table_state.flush_current_row();
+            }
+
+            Event::Start(Tag::TableCell) => {
+                table_state.in_table_cell = true;
+                global_rich_md.clear();
+            }
+            Event::End(TagEnd::TableCell) => {
+                table_state.in_table_cell = false;
+                let align = table_state
+                    .alignments
+                    .get(table_state.current_cell_align_idx)
+                    .copied()
+                    .unwrap_or(0);
+                table_state.current_cell_align_idx += 1;
+
+                let md = global_rich_md.trim().to_string();
+                table_state.current_row_cells.push(MarkdownTableCell {
+                    text: SharedString::from(md.clone()),
+                    rich_text: to_styled_text(&md),
+                    alignment: align,
+                    is_header: table_state.is_current_row_header,
+                });
+                global_rich_md.clear();
+            }
+
             // ---- Lists ----
             Event::Start(Tag::List(start_number)) => {
-                if list_stack.is_empty() {
+                if list_stack.is_empty() && !table_state.in_table {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                 }
                 let is_ordered = start_number.is_some();
@@ -188,7 +297,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
             }
             Event::End(TagEnd::List(_)) => {
                 list_stack.pop();
-                if list_stack.is_empty() {
+                if list_stack.is_empty() && !table_state.in_table {
                     last_top_level_pos = range.end;
                 }
             }
@@ -222,6 +331,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                     is_task: false,
                     is_checked: false,
                     depth,
+                    rows: ModelRc::default(),
                 });
 
                 item_stack.push(ItemFrame {
@@ -249,6 +359,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                             is_task: frame.is_task,
                             is_checked: frame.is_checked,
                             depth: frame.depth,
+                            rows: ModelRc::default(),
                         };
                     }
                 }
@@ -269,7 +380,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 let marker = bold::open_bold_tag();
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(marker);
-                } else if is_in_heading || is_in_paragraph {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
                     global_rich_md.push_str(marker);
                 }
             }
@@ -277,7 +388,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 let marker = bold::close_bold_tag();
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(marker);
-                } else if is_in_heading || is_in_paragraph {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
                     global_rich_md.push_str(marker);
                 }
             }
@@ -286,7 +397,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 let marker = italic::open_italic_tag();
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(marker);
-                } else if is_in_heading || is_in_paragraph {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
                     global_rich_md.push_str(marker);
                 }
             }
@@ -294,7 +405,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 let marker = italic::close_italic_tag();
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(marker);
-                } else if is_in_heading || is_in_paragraph {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
                     global_rich_md.push_str(marker);
                 }
             }
@@ -302,14 +413,14 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
             Event::Start(Tag::Strikethrough) => {
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str("~~");
-                } else if is_in_heading || is_in_paragraph {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
                     global_rich_md.push_str("~~");
                 }
             }
             Event::End(TagEnd::Strikethrough) => {
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str("~~");
-                } else if is_in_heading || is_in_paragraph {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
                     global_rich_md.push_str("~~");
                 }
             }
@@ -319,7 +430,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(&text);
                     frame.plain_text.push_str(&text);
-                } else if is_in_heading || is_in_paragraph {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
                     global_rich_md.push_str(&text);
                 }
             }
@@ -328,7 +439,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(&formatted);
                     frame.plain_text.push_str(&code_str);
-                } else if is_in_heading || is_in_paragraph {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
                     global_rich_md.push_str(&formatted);
                 }
             }
@@ -336,7 +447,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push('\n');
                     frame.plain_text.push('\n');
-                } else if is_in_heading || is_in_paragraph {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
                     global_rich_md.push('\n');
                 }
             }
@@ -352,6 +463,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
         e.block_type == MarkdownBlockType::ListItem
             || e.block_type == MarkdownBlockType::Rule
             || e.block_type == MarkdownBlockType::Spacer
+            || e.block_type == MarkdownBlockType::Table
             || !e.text.is_empty()
     });
     elements
