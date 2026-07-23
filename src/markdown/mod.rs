@@ -15,6 +15,8 @@ pub mod heading;
 pub mod italic;
 pub mod list;
 pub mod paragraph;
+pub mod rule;
+pub mod spacer;
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use slint::{SharedString, StyledText};
@@ -69,10 +71,37 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
     let mut list_stack: Vec<ListState> = Vec::new();
     let mut item_stack: Vec<ItemFrame> = Vec::new();
 
-    for event in parser {
+    // Track end position of previous top-level block to compute blank line gaps
+    let mut last_top_level_pos: usize = 0;
+
+    // Helper closure to insert a Spacer element if blank lines exist between blocks
+    let check_and_insert_spacer = |elements: &mut Vec<MarkdownElement>, last_pos: usize, current_start: usize| {
+        if current_start > last_pos && last_pos < markdown_text.len() {
+            let slice = &markdown_text[last_pos..current_start.min(markdown_text.len())];
+            let blank_lines = spacer::calculate_blank_lines(slice);
+            if blank_lines > 0 {
+                elements.push(MarkdownElement {
+                    block_type: MarkdownBlockType::Spacer,
+                    text: SharedString::default(),
+                    rich_text: to_styled_text(""),
+                    level: blank_lines,
+                    is_ordered: false,
+                    prefix: SharedString::default(),
+                    is_task: false,
+                    is_checked: false,
+                    depth: 0,
+                });
+            }
+        }
+    };
+
+    for (event, range) in parser.into_offset_iter() {
         match event {
             // ---- Headings ----
             Event::Start(Tag::Heading { level, .. }) => {
+                if list_stack.is_empty() {
+                    check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
+                }
                 is_in_heading = true;
                 current_heading_level = heading::heading_level_to_int(level);
                 global_rich_md.clear();
@@ -93,6 +122,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                             is_checked: false,
                             depth: 0,
                         });
+                        last_top_level_pos = range.end;
                     }
                     global_rich_md.clear();
                 }
@@ -101,6 +131,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
             // ---- Paragraphs ----
             Event::Start(Tag::Paragraph) => {
                 if list_stack.is_empty() {
+                    check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                     is_in_paragraph = true;
                     global_rich_md.clear();
                 }
@@ -121,19 +152,45 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                             is_checked: false,
                             depth: 0,
                         });
+                        last_top_level_pos = range.end;
                     }
                     global_rich_md.clear();
                 }
             }
 
+            // ---- Horizontal Rule (---) ----
+            Event::Rule => {
+                if list_stack.is_empty() {
+                    check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
+                    elements.push(MarkdownElement {
+                        block_type: MarkdownBlockType::Rule,
+                        text: SharedString::from(rule::format_rule()),
+                        rich_text: to_styled_text(""),
+                        level: 0,
+                        is_ordered: false,
+                        prefix: SharedString::default(),
+                        is_task: false,
+                        is_checked: false,
+                        depth: 0,
+                    });
+                    last_top_level_pos = range.end;
+                }
+            }
+
             // ---- Lists ----
             Event::Start(Tag::List(start_number)) => {
+                if list_stack.is_empty() {
+                    check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
+                }
                 let is_ordered = start_number.is_some();
                 let current_index = start_number.unwrap_or(1) as i32;
                 list_stack.push(ListState { is_ordered, current_index });
             }
             Event::End(TagEnd::List(_)) => {
                 list_stack.pop();
+                if list_stack.is_empty() {
+                    last_top_level_pos = range.end;
+                }
             }
 
             // ---- List Items ----
@@ -287,10 +344,15 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
         }
     }
 
+    // Check for trailing blank lines at end of file
+    check_and_insert_spacer(&mut elements, last_top_level_pos, markdown_text.len());
+
     // Remove placeholder items with no content
     elements.retain(|e| {
-        // Keep list items even if plain text is empty (task items with only formatting)
-        e.block_type == MarkdownBlockType::ListItem || !e.text.is_empty()
+        e.block_type == MarkdownBlockType::ListItem
+            || e.block_type == MarkdownBlockType::Rule
+            || e.block_type == MarkdownBlockType::Spacer
+            || !e.text.is_empty()
     });
     elements
 }

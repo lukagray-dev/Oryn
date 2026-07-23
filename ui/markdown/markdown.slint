@@ -9,12 +9,16 @@ import { Tokens } from "../shared/tokens.slint";
 import { MarkdownHeading } from "./heading.slint";
 import { MarkdownParagraph } from "./paragraph.slint";
 import { MarkdownList } from "./list.slint";
+import { MarkdownRule } from "./rule.slint";
+import { MarkdownSpacer } from "./spacer.slint";
 
 // Enum specifying the block type of a Markdown AST element
 export enum MarkdownBlockType {
     Heading,
     Paragraph,
     ListItem,
+    Rule,
+    Spacer,
 }
 
 // Struct representing a single parsed Markdown block element.
@@ -63,6 +67,12 @@ export component MarkdownView inherits VerticalLayout {
             prefix: element.prefix;
             is_task: element.is_task;
             is_checked: element.is_checked;
+        }
+
+        if (element.block_type == MarkdownBlockType.Rule) : MarkdownRule {}
+
+        if (element.block_type == MarkdownBlockType.Spacer) : MarkdownSpacer {
+            level: element.level;
         }
     }
 }
