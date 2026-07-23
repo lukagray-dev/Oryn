@@ -211,6 +211,7 @@ component FilesMenu inherits Rectangle {
     callback header_clicked();
     callback dismiss();
     callback new_document_clicked();
+    callback open_project_clicked();
     callback open_file_clicked();
     callback save_file_clicked();
     callback settings_clicked();
@@ -234,7 +235,7 @@ component FilesMenu inherits Rectangle {
         x: 0px;
         y: Tokens.titlebar_height;
         width: Tokens.dropdown_surface_width;
-        height: 164px;
+        height: 194px;
         visible: root.open;
 
         new_doc := DropdownItem {
@@ -248,9 +249,20 @@ component FilesMenu inherits Rectangle {
             }
         }
 
-        open_doc := DropdownItem {
+        open_proj := DropdownItem {
             x: Tokens.dropdown_surface_padding;
             y: Tokens.dropdown_surface_padding + Tokens.dropdown_item_height + Tokens.dropdown_item_gap;
+            label: "Open Project...";
+            ui_scale: root.ui_scale;
+            clicked => {
+                root.dismiss();
+                root.open_project_clicked();
+            }
+        }
+
+        open_doc := DropdownItem {
+            x: Tokens.dropdown_surface_padding;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 2;
             label: "Open File...";
             ui_scale: root.ui_scale;
             clicked => {
@@ -261,7 +273,7 @@ component FilesMenu inherits Rectangle {
 
         save_doc := DropdownItem {
             x: Tokens.dropdown_surface_padding;
-            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 2;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 3;
             label: "Save Document";
             ui_scale: root.ui_scale;
             clicked => {
@@ -272,12 +284,12 @@ component FilesMenu inherits Rectangle {
 
         sep1 := DropdownSeparator {
             x: Tokens.dropdown_surface_padding;
-            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 3;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 4;
         }
 
         settings := DropdownItem {
             x: Tokens.dropdown_surface_padding;
-            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 3 + 1px + Tokens.dropdown_item_gap;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 4 + 1px + Tokens.dropdown_item_gap;
             label: "Settings...";
             ui_scale: root.ui_scale;
             clicked => {
@@ -288,7 +300,7 @@ component FilesMenu inherits Rectangle {
 
         exit_item := DropdownItem {
             x: Tokens.dropdown_surface_padding;
-            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 4 + 1px + Tokens.dropdown_item_gap;
+            y: Tokens.dropdown_surface_padding + (Tokens.dropdown_item_height + Tokens.dropdown_item_gap) * 5 + 1px + Tokens.dropdown_item_gap;
             label: "Exit";
             danger: true;
             ui_scale: root.ui_scale;
@@ -643,6 +655,7 @@ export component Titlebar inherits Rectangle {
     callback undo_requested();
     callback redo_requested();
     callback new_document_requested();
+    callback open_project_requested();
     callback open_file_requested();
     callback save_file_requested();
     callback settings_requested();
@@ -740,6 +753,7 @@ export component Titlebar inherits Rectangle {
             root.active_menu = 0;
         }
         new_document_clicked => { root.new_document_requested(); }
+        open_project_clicked => { root.open_project_requested(); }
         open_file_clicked => { root.open_file_requested(); }
         save_file_clicked => { root.save_file_requested(); }
         settings_clicked => { root.settings_requested(); }

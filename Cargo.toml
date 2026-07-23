@@ -9,6 +9,10 @@ edition = "2021"
 
 [dependencies]
 slint = { version = "1.16.1", features = ["unstable-winit-030", "renderer-skia"] }
+rfd = "0.15"
+dirs = "5.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [build-dependencies]
 slint-build = "1.16.1"

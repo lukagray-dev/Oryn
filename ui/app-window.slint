@@ -35,6 +35,9 @@ export component AppWindow inherits Window {
     in-out property <int> active_conversation_index: -1;
     in-out property <int> active_chat_index: -1;
 
+    // Main document text content
+    in-out property <string> editor_text: "";
+
     // Dynamically disable window resize border when maximized/fullscreen
     // so hovering window edges in fullscreen mode does not trigger resize cursor.
     resize-border-width: root.window_maximized ? 0px : Tokens.window_resize_border_width;
@@ -58,6 +61,13 @@ export component AppWindow inherits Window {
     callback undo_requested();
     callback redo_requested();
     callback new_document_requested();
+    callback open_project_requested();
+    callback new_project_document_requested(string, int);
+    callback project_document_clicked(string, int, int);
+    callback general_document_clicked(string, int);
+    callback delete_general_document_requested(string, int);
+    callback delete_project_document_requested(string, int, int);
+    callback delete_project_requested(string, int);
     callback open_file_requested();
     callback save_file_requested();
     callback settings_requested();
@@ -91,12 +101,21 @@ export component AppWindow inherits Window {
 
             settings_clicked => { root.settings_requested(); }
             new_chat_clicked => { root.new_document_requested(); }
+            new_project_clicked => { root.open_project_requested(); }
+            new_session_clicked(proj_path, proj_idx) => { root.new_project_document_requested(proj_path, proj_idx); }
+            project_conversation_clicked(file_path, proj_idx, conv_idx) => { root.project_document_clicked(file_path, proj_idx, conv_idx); }
+            chat_clicked(file_path, chat_idx) => { root.general_document_clicked(file_path, chat_idx); }
+            delete_chat_clicked(file_path, chat_idx) => { root.delete_general_document_requested(file_path, chat_idx); }
+            delete_conversation_clicked(file_path, proj_idx, conv_idx) => { root.delete_project_document_requested(file_path, proj_idx, conv_idx); }
+            delete_project_clicked(proj_path, proj_idx) => { root.delete_project_requested(proj_path, proj_idx); }
         }
 
         // ---------------------------------------------------------------------
         // Scrollable Main Content Workspace Component
         // ---------------------------------------------------------------------
-        content_workspace := MainContent {}
+        content_workspace := MainContent {
+            editor_text <=> root.editor_text;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -138,6 +157,7 @@ export component AppWindow inherits Window {
         undo_requested => { root.undo_requested(); }
         redo_requested => { root.redo_requested(); }
         new_document_requested => { root.new_document_requested(); }
+        open_project_requested => { root.open_project_requested(); }
         open_file_requested => { root.open_file_requested(); }
         save_file_requested => { root.save_file_requested(); }
         settings_requested => { root.settings_requested(); }
