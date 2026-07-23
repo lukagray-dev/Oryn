@@ -4,10 +4,10 @@
 // Main Rust backend engine for parsing Markdown documents into Slint `MarkdownElement` models
 // using the high-performance `pulldown-cmark` CommonMark / GFM parser.
 //
-// Inline formatting (bold, italic, code) is handled by reconstructing the original Markdown
+// Inline formatting (bold, italic, code, math) is handled by reconstructing the original Markdown
 // syntax from `pulldown-cmark` events and passing it to `slint::StyledText::from_markdown()`
 // (available in Slint >= 1.17). This lets Slint's native `StyledText` widget render
-// bold/italic/code inline formatting without raw HTML injection.
+// bold/italic/code/math inline formatting without raw HTML injection.
 
 pub mod bold;
 pub mod code;
@@ -15,6 +15,7 @@ pub mod code_block;
 pub mod heading;
 pub mod italic;
 pub mod list;
+pub mod math;
 pub mod paragraph;
 pub mod rule;
 pub mod spacer;
@@ -94,6 +95,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_TASKLISTS);
     options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_MATH);
 
     let parser = Parser::new_ext(markdown_text, options);
     let mut elements = Vec::new();
@@ -264,6 +266,37 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                         depth: 0,
                         rows: ModelRc::default(),
                         language: SharedString::from(lang_label),
+                    });
+                    last_top_level_pos = range.end;
+                }
+            }
+
+            // ---- Math Events ($...$ and $$...$$) ----
+            Event::InlineMath(math_expr) => {
+                let formatted = math::format_inline_math(&math_expr);
+                if let Some(frame) = item_stack.last_mut() {
+                    frame.rich_md.push_str(&formatted);
+                    frame.plain_text.push_str(&math_expr);
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
+                    global_rich_md.push_str(&formatted);
+                }
+            }
+            Event::DisplayMath(math_expr) => {
+                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block {
+                    check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
+                    let display_str = math::format_display_math(&math_expr);
+                    elements.push(MarkdownElement {
+                        block_type: MarkdownBlockType::DisplayMath,
+                        text: SharedString::from(math_expr.to_string()),
+                        rich_text: to_styled_text(&display_str),
+                        level: 0,
+                        is_ordered: false,
+                        prefix: SharedString::default(),
+                        is_task: false,
+                        is_checked: false,
+                        depth: 0,
+                        rows: ModelRc::default(),
+                        language: SharedString::default(),
                     });
                     last_top_level_pos = range.end;
                 }
@@ -533,6 +566,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
             || e.block_type == MarkdownBlockType::Spacer
             || e.block_type == MarkdownBlockType::Table
             || e.block_type == MarkdownBlockType::CodeBlock
+            || e.block_type == MarkdownBlockType::DisplayMath
             || !e.text.is_empty()
     });
     elements

@@ -3617,6 +3617,7 @@ dependencies = [
  "dirs",
  "notify",
  "pulldown-cmark 0.11.3",
+ "regex",
  "rfd",
  "serde",
  "serde_json",

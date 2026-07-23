@@ -14,6 +14,7 @@ import { MarkdownRule } from "./rule.slint";
 import { MarkdownSpacer } from "./spacer.slint";
 import { MarkdownTable } from "./table.slint";
 import { MarkdownCodeBlock } from "./code_block.slint";
+import { MarkdownDisplayMath } from "./math.slint";
 
 // Enum specifying the block type of a Markdown AST element
 export enum MarkdownBlockType {
@@ -24,6 +25,7 @@ export enum MarkdownBlockType {
     Spacer,
     Table,
     CodeBlock,
+    DisplayMath,
 }
 
 // Struct representing a single parsed Markdown block element.
@@ -91,6 +93,10 @@ export component MarkdownView inherits VerticalLayout {
         if (element.block_type == MarkdownBlockType.CodeBlock) : MarkdownCodeBlock {
             rich_text: element.rich_text;
             language: element.language;
+        }
+
+        if (element.block_type == MarkdownBlockType.DisplayMath) : MarkdownDisplayMath {
+            rich_text: element.rich_text;
         }
     }
 }
