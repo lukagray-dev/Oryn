@@ -1,0 +1,68 @@
+// =============================================================================
+// Master Markdown Renderer Component (`ui/markdown/markdown.slint`)
+// =============================================================================
+// Entry point component for rendering GitHub-flavored Markdown documents in Slint.
+// Uses Slint 1.17's built-in `StyledText` element (no import needed — it's a builtin)
+// with the `styled-text` property type for native rich inline formatting.
+
+import { Tokens } from "../shared/tokens.slint";
+import { MarkdownHeading } from "./heading.slint";
+import { MarkdownParagraph } from "./paragraph.slint";
+import { MarkdownList } from "./list.slint";
+
+// Enum specifying the block type of a Markdown AST element
+export enum MarkdownBlockType {
+    Heading,
+    Paragraph,
+    ListItem,
+}
+
+// Struct representing a single parsed Markdown block element.
+// `rich_text` is a `styled-text` field parsed from Markdown in Rust via
+// `slint::StyledText::from_markdown()` (requires Slint >= 1.17).
+export struct MarkdownElement {
+    block_type: MarkdownBlockType,
+    // `text` is the plain-text fallback string (for list prefix, task checks etc.)
+    text: string,
+    // `rich_text` carries full inline bold/italic/code formatting
+    rich_text: styled-text,
+    level: int,
+    is_ordered: bool,
+    prefix: string,
+    is_task: bool,
+    is_checked: bool,
+    depth: int,
+}
+
+// Main exported view component rendering the array of Markdown blocks
+export component MarkdownView inherits VerticalLayout {
+    in property <[MarkdownElement]> elements: [];
+
+    spacing: 0px;
+    padding: 0px;
+    width: 100%;
+
+    for element in root.elements : VerticalLayout {
+        spacing: 0px;
+        padding: 0px;
+
+        if (element.block_type == MarkdownBlockType.Heading) : MarkdownHeading {
+            level: element.level;
+            rich_text: element.rich_text;
+        }
+
+        if (element.block_type == MarkdownBlockType.Paragraph) : MarkdownParagraph {
+            rich_text: element.rich_text;
+        }
+
+        if (element.block_type == MarkdownBlockType.ListItem) : MarkdownList {
+            text: element.text;
+            rich_text: element.rich_text;
+            depth: element.depth;
+            is_ordered: element.is_ordered;
+            prefix: element.prefix;
+            is_task: element.is_task;
+            is_checked: element.is_checked;
+        }
+    }
+}

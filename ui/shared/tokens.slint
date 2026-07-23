@@ -15,6 +15,9 @@
 // 3. KodeMono: Used for code blocks, terminal outputs, and monospaced snippets.
 import "../../assets/font/OpenSans/static/OpenSans-Regular.ttf";
 import "../../assets/font/Literata/static/Literata-Regular.ttf";
+import "../../assets/font/Literata/static/Literata-Bold.ttf";
+import "../../assets/font/Literata/static/Literata-Italic.ttf";
+import "../../assets/font/Literata/static/Literata-BoldItalic.ttf";
 import "../../assets/font/KodeMono/KodeMono-Regular.ttf";
 
 // Exported global singleton accessible from any Slint file.
@@ -30,6 +33,10 @@ export global Tokens {
 
     // Dedicated monospace font family used for code blocks and technical text.
     in property <string> code_font_family: "Kode Mono";
+
+    // Dedicated inline code styling tokens (GitHub-style cyan text & grey container surface)
+    in property <color> code_text_color: #79c0ff;
+    in property <color> code_bg_color: #5a5a5a;
 
     // -------------------------------------------------------------------------
     // Primary Surface & Window Background Colors

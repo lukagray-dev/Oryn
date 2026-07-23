@@ -1,0 +1,40 @@
+// =============================================================================
+// Markdown Heading Component (`ui/markdown/heading.slint`)
+// =============================================================================
+// Renders Markdown Headings (H1 through H6) with Slint's built-in StyledText
+// for native bold/italic inline formatting. GitHub Primer CSS exact sizes.
+// StyledText is a Slint builtin — no import required.
+// Note: StyledText does NOT support `wrap` or `overflow` properties.
+// It wraps automatically based on its `width` property.
+
+import { Tokens } from "../shared/tokens.slint";
+
+export component MarkdownHeading inherits VerticalLayout {
+    in property <int> level: 1;
+    // rich_text carries parsed inline formatting via styled-text type
+    in property <styled-text> rich_text: @markdown("");
+
+    spacing: 0px;
+    padding-top: level == 1 ? 16px : (level == 2 ? 16px : (level == 3 ? 14px : (level == 4 ? 12px : 8px)));
+    padding-bottom: (level == 1 || level == 2) ? 8px : 4px;
+
+    // StyledText renders bold/italic/code inline formatting natively.
+    // Width drives auto word-wrap. Use `preferred-height` for layout sizing.
+    heading_label := StyledText {
+        width: parent.width;
+        text: root.rich_text;
+        default-font-family: Tokens.editor_font_family;
+        default-font-size: root.level == 1 ? 32px
+            : (root.level == 2 ? 24px
+            : (root.level == 3 ? 20px
+            : (root.level == 4 ? 16px
+            : (root.level == 5 ? 14px : 13.6px))));
+        default-color: root.level == 6 ? #8b949e : Tokens.text_primary;
+    }
+
+    // GitHub-style subtle 1px bottom border line for H1 and H2
+    if (root.level == 1 || root.level == 2) : Rectangle {
+        height: 1px;
+        background: #30363d;
+    }
+}

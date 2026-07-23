@@ -11,6 +11,7 @@ import { Tokens } from "./shared/tokens.slint";
 import { Titlebar } from "./titlebar/titlebar.slint";
 import { Sidebar, SidebarProject, SidebarConversation } from "./left-sidebar/left-sidebar.slint";
 import { MainContent } from "./main-content/main-content.slint";
+import { MarkdownElement } from "./markdown/markdown.slint";
 
 export component AppWindow inherits Window {
     // Default window geometry setup
@@ -35,8 +36,9 @@ export component AppWindow inherits Window {
     in-out property <int> active_conversation_index: -1;
     in-out property <int> active_chat_index: -1;
 
-    // Main document text content
+    // Main document text content & Markdown AST element model
     in-out property <string> editor_text: "";
+    in property <[MarkdownElement]> markdown_elements: [];
 
     // Dynamically disable window resize border when maximized/fullscreen
     // so hovering window edges in fullscreen mode does not trigger resize cursor.
@@ -162,6 +164,7 @@ export component AppWindow inherits Window {
         // ---------------------------------------------------------------------
         content_workspace := MainContent {
             editor_text <=> root.editor_text;
+            markdown_elements: root.markdown_elements;
         }
     }
 

@@ -5,7 +5,8 @@
 //
 // This file initializes the Slint GUI window (`AppWindow`), configures the high-quality
 // Skia rendering engine (`winit-skia`) for crisp subpixel text anti-aliasing, binds
-// event handlers via submodules (`titlebar`, `workspace`), and executes the Slint event loop.
+// event handlers via submodules (`titlebar`, `workspace`, `markdown`), registers `Kode Mono`
+// as the default monospace font for StyledText `Style::Code` backtick spans, and executes the Slint event loop.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -15,8 +16,24 @@ use std::error::Error;
 slint::include_modules!();
 
 // Declare modular submodules
+mod markdown;
 mod titlebar;
 mod workspace;
+
+/// Configures `Kode Mono` as the primary font for Slint's `GenericFamily::Monospace`,
+/// ensuring `StyledText` `Style::Code` (backtick `` `code` `` spans) render natively in `Kode Mono`.
+fn setup_monospace_font() {
+    use slint::fontique_010::fontique;
+    let kode_mono_bytes = include_bytes!("../assets/font/KodeMono/KodeMono-Regular.ttf");
+    let blob = fontique::Blob::new(std::sync::Arc::new(kode_mono_bytes.to_vec()));
+    let mut collection = slint::fontique_010::shared_collection();
+    let fonts = collection.register_fonts(blob, None);
+    let family_ids: Vec<_> = fonts.iter().map(|(family_id, _)| *family_id).collect();
+    collection.set_generic_families(
+        fontique::GenericFamily::Monospace,
+        family_ids.into_iter(),
+    );
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     // -------------------------------------------------------------------------
@@ -33,7 +50,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let ui = AppWindow::new()?;
 
     // -------------------------------------------------------------------------
-    // 2. Wire Titlebar & Workspace Event Callbacks
+    // 2. Map Monospace Generic Font Family to Kode Mono
+    // -------------------------------------------------------------------------
+    setup_monospace_font();
+
+    // -------------------------------------------------------------------------
+    // 3. Wire Titlebar & Workspace Event Callbacks
     // -------------------------------------------------------------------------
     // Delegates window chrome interactions to `titlebar` module.
     titlebar::setup_titlebar_callbacks(&ui);
@@ -42,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     workspace::setup_workspace_callbacks(&ui);
 
     // -------------------------------------------------------------------------
-    // 3. Run Main Slint UI Event Loop
+    // 4. Run Main Slint UI Event Loop
     // -------------------------------------------------------------------------
     // Starts event processing loop and blocks until the window is closed.
     ui.run()?;

@@ -2,17 +2,17 @@
 // Oryn Main Content Component (`ui/main-content/main-content.slint`)
 // =============================================================================
 // Main document workspace canvas for Oryn with web-like smooth scrolling & custom scrollbar.
-// Features:
-// 1. Web-Like Smooth Scroll Viewport: `Flickable` container equipped with `ease-out` smooth animation on `viewport-y`.
-// 2. Slim Stylish Scrollbar: Custom floating scrollbar matching Oryn's dark theme (`Tokens.dropdown_border` / `Tokens.accent_blue`).
-// 3. Editor Typography: Uses `Literata` (`Tokens.editor_font_family`) for note typing and Markdown document display.
+// Integrates the MarkdownView rendering engine for GitHub-flavored document display.
 
 import { Tokens } from "../shared/tokens.slint";
+import { MarkdownView, MarkdownElement } from "../markdown/markdown.slint";
 
 // Exported main content workspace component.
 export component MainContent inherits Rectangle {
     // Document state property for the raw Markdown text
     in-out property <string> editor_text: "";
+    // Structured Markdown AST block elements model
+    in property <[MarkdownElement]> markdown_elements: [];
 
     // Callback for text modifications
     callback text_changed(string);
@@ -41,19 +41,10 @@ export component MainContent inherits Rectangle {
             width: parent.width;
 
             // -----------------------------------------------------------------
-            // Markdown Writing / Rendering Canvas (Uses Editor Serif Font: Literata)
+            // GitHub-Flavored Markdown View Rendering Engine
             // -----------------------------------------------------------------
-            editor_input := TextInput {
-                text <=> root.editor_text;
-                font-family: Tokens.editor_font_family;
-                font-size: Tokens.editor_font_size;
-                color: Tokens.text_secondary;
-                wrap: word-wrap;
-                single-line: false;
-
-                edited => {
-                    root.text_changed(self.text);
-                }
+            MarkdownView {
+                elements: root.markdown_elements;
             }
         }
     }
@@ -61,8 +52,6 @@ export component MainContent inherits Rectangle {
     // -------------------------------------------------------------------------
     // Custom Slim & Stylish Theme Scrollbar
     // -------------------------------------------------------------------------
-    // Floating slim vertical scrollbar track and thumb on the right edge matching
-    // Oryn's dark glassmorphism theme tokens.
     scrollbar_track := Rectangle {
         x: parent.width - 10px;
         y: 6px;

@@ -1,0 +1,131 @@
+// =============================================================================
+// Markdown List Component (`ui/markdown/list.slint`)
+// =============================================================================
+// Renders GitHub-flavored Markdown lists with built-in StyledText for inline
+// bold/italic. StyledText is a Slint builtin — no import required.
+// Note: StyledText does NOT support `wrap` or `overflow` properties.
+// It wraps automatically based on its `width` property.
+// 1. Unordered Lists: vector bullet shapes (depth 0 -> disc, depth 1 -> ring, depth 2+ -> square).
+// 2. Ordered Lists: numeric prefix formatted from Rust.
+// 3. Task Lists: interactive checkbox indicator.
+// 4. Hierarchy Guide Lines: vertical 1px guide lines per nesting level.
+
+import { Tokens } from "../shared/tokens.slint";
+
+export component MarkdownList inherits Rectangle {
+    // plain text fallback (used for task check, etc.)
+    in property <string> text: "";
+    // rich_text carries parsed inline formatting via styled-text type
+    in property <styled-text> rich_text: @markdown("");
+    in property <int> depth: 0;
+    in property <bool> is_ordered: false;
+    in property <string> prefix: "";
+    in property <bool> is_task: false;
+    in property <bool> is_checked: false;
+
+    horizontal-stretch: 1;
+    height: list_layout.preferred-height + 4px;
+
+    // Vertical hierarchy guide lines for nested sub-bullets
+    for d in root.depth : Rectangle {
+        x: d * 24px + 6px;
+        y: 0px;
+        width: 1px;
+        height: parent.height;
+        background: #30363d;
+    }
+
+    list_layout := HorizontalLayout {
+        x: 0px;
+        y: 2px;
+        width: parent.width;
+        padding-left: root.depth * 24px;
+        spacing: 6px;
+
+        // Bullet / Prefix / Checkbox container
+        prefix_container := Rectangle {
+            width: root.is_ordered ? 30px : (root.is_task ? 18px : 14px);
+            height: 24px;
+
+            // Depth 0: Solid Disc
+            if (!root.is_ordered && !root.is_task && root.depth == 0) : Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: 7px;
+                height: 7px;
+                border-radius: 3.5px;
+                background: Tokens.text_secondary;
+            }
+
+            // Depth 1: Hollow Ring
+            if (!root.is_ordered && !root.is_task && root.depth == 1) : Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: 7px;
+                height: 7px;
+                border-radius: 3.5px;
+                border-width: 1.5px;
+                border-color: Tokens.text_secondary;
+                background: transparent;
+            }
+
+            // Depth 2+: Solid Square
+            if (!root.is_ordered && !root.is_task && root.depth >= 2) : Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: 6px;
+                height: 6px;
+                border-radius: 1px;
+                background: Tokens.text_secondary;
+            }
+
+            // Ordered prefix label (plain Text is fine here — just a number/letter)
+            if (root.is_ordered && !root.is_task) : Text {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                text: root.prefix;
+                font-family: Tokens.editor_font_family;
+                font-size: Tokens.editor_font_size;
+                color: Tokens.text_secondary;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+
+            // Task checkbox
+            if (root.is_task) : Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: 14px;
+                height: 14px;
+                border-radius: 3px;
+                border-width: 1px;
+                border-color: root.is_checked ? Tokens.accent_blue : #484f58;
+                background: root.is_checked ? Tokens.accent_blue : transparent;
+
+                if (root.is_checked) : Image {
+                    source: @image-url("../../assets/icons/sidebar/check.svg");
+                    width: 10px;
+                    height: 10px;
+                    x: 1px;
+                    y: 1px;
+                    colorize: #ffffff;
+                    image-fit: contain;
+                }
+            }
+        }
+
+        // List item body text with native inline bold/italic rendering via StyledText.
+        // horizontal-stretch makes it fill remaining width, and width drives word-wrap.
+        item_text := StyledText {
+            horizontal-stretch: 1;
+            height: max(24px, self.preferred-height);
+            text: root.rich_text;
+            default-font-family: Tokens.editor_font_family;
+            default-font-size: Tokens.editor_font_size;
+            default-color: root.is_task && root.is_checked ? Tokens.text_muted : Tokens.text_primary;
+            vertical-alignment: center;
+        }
+    }
+}

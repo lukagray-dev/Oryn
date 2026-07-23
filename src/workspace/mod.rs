@@ -34,25 +34,29 @@ struct GlobalWatcher {
 static WATCHER: Mutex<Option<GlobalWatcher>> = Mutex::new(None);
 
 // Initial sample markdown content for first-time users
-const SAMPLE_MARKDOWN_CONTENT: &str = r#"# Welcome to Oryn
+const SAMPLE_MARKDOWN_CONTENT: &str = r#"# Heading Level 1
 
-A minimalist, high-performance WYSIWYG markdown editor built with Rust and Slint.
+This is a demonstration paragraph under Heading 1 rendered using the Literata serif font family with regular weight.
 
-## Quick Start Guide
+## Heading Level 2
 
-- **New General Document:** Click the **New document** button at the top of the sidebar or the `+` button in the **Documents** section header. Documents are stored in `~/.oryn/documents/`.
-- **Open Project:** Click **File -> Open Project...** in the titlebar or the `+` button in the **Projects** section header.
-- **Project Documents:** Click the `+` button on any opened project folder row to create a new markdown file inside that project.
+Oryn parses CommonMark and GitHub-Flavored Markdown AST tokens natively in Rust.
 
----
+### Heading Level 3
 
-### Sample Code Block
+Heading 3 renders at 20px font size with comfortable vertical paragraph padding.
 
-```rust
-fn main() {
-    println!("Hello from Oryn core engine!");
-}
-```
+#### Heading Level 4
+
+Heading 4 renders at 16px font size.
+
+##### Heading Level 5
+
+Heading 5 renders at 14px font size.
+
+<h6>Heading Level 6</h6>
+
+Heading 6 renders at 13.6px with muted text color matching GitHub's specification.
 "#;
 
 // =============================================================================
@@ -279,7 +283,13 @@ pub fn load_document_into_editor(ui: &AppWindow, file_path_str: &str) {
     let path = Path::new(file_path_str);
     if path.exists() && path.is_file() {
         if let Ok(content) = fs::read_to_string(path) {
-            ui.set_editor_text(content.into());
+            ui.set_editor_text(content.as_str().into());
+
+            // Parse Markdown AST elements and update Slint renderer model
+            let parsed_elements = crate::markdown::parse_markdown(&content);
+            let model = Rc::new(VecModel::from(parsed_elements));
+            ui.set_markdown_elements(ModelRc::from(model));
+
             WORKSPACE.with(|mgr| {
                 mgr.borrow_mut().active_file_path = Some(path.to_path_buf());
             });
