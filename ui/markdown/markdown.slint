@@ -16,6 +16,8 @@ import { MarkdownTable } from "./table.slint";
 import { MarkdownCodeBlock } from "./code_block.slint";
 import { MarkdownDisplayMath } from "./math.slint";
 import { MarkdownBlockQuote } from "./blockquote.slint";
+import { MarkdownLink } from "./link.slint";
+import { MarkdownMermaid } from "./mermaid.slint";
 
 // Enum specifying the block type of a Markdown AST element
 export enum MarkdownBlockType {
@@ -28,6 +30,8 @@ export enum MarkdownBlockType {
     CodeBlock,
     DisplayMath,
     BlockQuote,
+    Link,
+    Mermaid,
 }
 
 // Struct representing a single parsed Markdown block element.
@@ -35,7 +39,7 @@ export enum MarkdownBlockType {
 // `slint::StyledText::from_markdown()` (requires Slint >= 1.17).
 export struct MarkdownElement {
     block_type: MarkdownBlockType,
-    // `text` is the plain-text fallback string (for list prefix, task checks etc.)
+    // `text` is the plain-text fallback string (or target URL for links)
     text: string,
     // `rich_text` carries full inline bold/italic/code formatting
     rich_text: styled-text,
@@ -49,11 +53,14 @@ export struct MarkdownElement {
     rows: [MarkdownTableRow],
     // Language identifier for MarkdownBlockType.CodeBlock (e.g. "rust", "js")
     language: string,
+    // Rendered vector image for MarkdownBlockType.Mermaid
+    diagram_image: image,
 }
 
 // Main exported view component rendering the array of Markdown blocks
 export component MarkdownView inherits VerticalLayout {
     in property <[MarkdownElement]> elements: [];
+    callback open-url(string);
 
     spacing: 0px;
     padding: 0px;
@@ -104,6 +111,19 @@ export component MarkdownView inherits VerticalLayout {
         if (element.block_type == MarkdownBlockType.BlockQuote) : MarkdownBlockQuote {
             rich_text: element.rich_text;
             depth: element.depth;
+        }
+
+        if (element.block_type == MarkdownBlockType.Link) : MarkdownLink {
+            rich_text: element.rich_text;
+            url: element.text;
+
+            open-url(url) => {
+                root.open-url(url);
+            }
+        }
+
+        if (element.block_type == MarkdownBlockType.Mermaid) : MarkdownMermaid {
+            diagram_image: element.diagram_image;
         }
     }
 }

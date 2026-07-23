@@ -83,6 +83,7 @@ export component AppWindow inherits Window {
     callback open_file_requested();
     callback save_file_requested();
     callback settings_requested();
+    callback open_url_requested(string);
 
     // -------------------------------------------------------------------------
     // Main Workspace Layout
@@ -165,6 +166,10 @@ export component AppWindow inherits Window {
         content_workspace := MainContent {
             editor_text <=> root.editor_text;
             markdown_elements: root.markdown_elements;
+
+            open-url(url) => {
+                root.open_url_requested(url);
+            }
         }
     }
 

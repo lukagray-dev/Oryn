@@ -63,6 +63,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Delegates document management, folder scanning, file loading & dialogs to `workspace` module.
     workspace::setup_workspace_callbacks(&ui);
 
+    // Wire open_url_requested callback to launch system default browser
+    ui.on_open_url_requested(|url| {
+        let _ = open::that(url.as_str());
+    });
+
     // -------------------------------------------------------------------------
     // 4. Run Main Slint UI Event Loop
     // -------------------------------------------------------------------------

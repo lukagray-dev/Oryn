@@ -2,10 +2,7 @@
 // Markdown Paragraph Component (`ui/markdown/paragraph.slint`)
 // =============================================================================
 // Renders standard body paragraph blocks with Slint's built-in StyledText for
-// native bold/italic/code inline formatting. Uses Literata serif typography.
-// StyledText is a Slint builtin — no import required.
-// Note: StyledText does NOT support `wrap` or `overflow` properties.
-// It wraps automatically based on its `width` property.
+// native bold/italic/code/link inline formatting. Uses Literata serif typography.
 
 import { Tokens } from "../shared/tokens.slint";
 
@@ -16,8 +13,7 @@ export component MarkdownParagraph inherits Rectangle {
     horizontal-stretch: 1;
     height: paragraph_text.preferred-height + 12px;
 
-    // StyledText renders bold/italic/code inline formatting natively.
-    // Width drives auto word-wrap.
+    // StyledText renders bold/italic/code/link inline formatting natively.
     paragraph_text := StyledText {
         x: 0px;
         y: 0px;

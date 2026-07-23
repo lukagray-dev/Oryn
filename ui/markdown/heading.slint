@@ -2,10 +2,7 @@
 // Markdown Heading Component (`ui/markdown/heading.slint`)
 // =============================================================================
 // Renders Markdown Headings (H1 through H6) with Slint's built-in StyledText
-// for native bold/italic inline formatting. GitHub Primer CSS exact sizes.
-// StyledText is a Slint builtin — no import required.
-// Note: StyledText does NOT support `wrap` or `overflow` properties.
-// It wraps automatically based on its `width` property.
+// for native bold/italic/link inline formatting. GitHub Primer CSS exact sizes.
 
 import { Tokens } from "../shared/tokens.slint";
 
@@ -18,8 +15,7 @@ export component MarkdownHeading inherits VerticalLayout {
     padding-top: level == 1 ? 16px : (level == 2 ? 16px : (level == 3 ? 14px : (level == 4 ? 12px : 8px)));
     padding-bottom: (level == 1 || level == 2) ? 8px : 4px;
 
-    // StyledText renders bold/italic/code inline formatting natively.
-    // Width drives auto word-wrap. Use `preferred-height` for layout sizing.
+    // StyledText renders bold/italic/code/link inline formatting natively.
     heading_label := StyledText {
         width: parent.width;
         text: root.rich_text;

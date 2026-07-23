@@ -4,10 +4,10 @@
 // Main Rust backend engine for parsing Markdown documents into Slint `MarkdownElement` models
 // using the high-performance `pulldown-cmark` CommonMark / GFM parser.
 //
-// Inline formatting (bold, italic, code, math) is handled by reconstructing the original Markdown
+// Inline formatting (bold, italic, code, math, links) is handled by reconstructing the original Markdown
 // syntax from `pulldown-cmark` events and passing it to `slint::StyledText::from_markdown()`
 // (available in Slint >= 1.17). This lets Slint's native `StyledText` widget render
-// bold/italic/code/math inline formatting without raw HTML injection.
+// bold/italic/code/math/link inline formatting without raw HTML injection.
 
 pub mod blockquote;
 pub mod bold;
@@ -15,15 +15,17 @@ pub mod code;
 pub mod code_block;
 pub mod heading;
 pub mod italic;
+pub mod link;
 pub mod list;
 pub mod math;
+pub mod mermaid;
 pub mod paragraph;
 pub mod rule;
 pub mod spacer;
 pub mod table;
 
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
-use slint::{ModelRc, SharedString, StyledText, VecModel};
+use slint::{Image, ModelRc, SharedString, StyledText, VecModel};
 
 use crate::{MarkdownBlockType, MarkdownElement, MarkdownTableCell, MarkdownTableRow};
 
@@ -90,7 +92,7 @@ fn to_styled_text(md: &str) -> StyledText {
 }
 
 /// Parses raw Markdown string into a vector of Slint `MarkdownElement` blocks.
-/// Uses `slint::StyledText::from_markdown()` for native bold/italic/code rendering.
+/// Uses `slint::StyledText::from_markdown()` for native bold/italic/code/link rendering.
 pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -106,6 +108,8 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
     let mut is_in_paragraph = false;
     let mut blockquote_depth: usize = 0;
     let mut max_blockquote_depth: usize = 0;
+    let mut current_link_url = String::new();
+    let mut is_in_link = false;
 
     // Buffer rebuilt in Markdown syntax so StyledText::from_markdown() renders it correctly
     let mut global_rich_md = String::new();
@@ -140,6 +144,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                     depth: 0,
                     rows: ModelRc::default(),
                     language: SharedString::default(),
+                    diagram_image: Image::default(),
                 });
             }
         }
@@ -177,6 +182,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                                 depth: (max_blockquote_depth.saturating_sub(1)) as i32,
                                 rows: ModelRc::default(),
                                 language: SharedString::default(),
+                                diagram_image: Image::default(),
                             });
                             last_top_level_pos = range.end;
                         }
@@ -211,6 +217,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                             depth: 0,
                             rows: ModelRc::default(),
                             language: SharedString::default(),
+                            diagram_image: Image::default(),
                         });
                         last_top_level_pos = range.end;
                     }
@@ -243,6 +250,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                             depth: 0,
                             rows: ModelRc::default(),
                             language: SharedString::default(),
+                            diagram_image: Image::default(),
                         });
                         last_top_level_pos = range.end;
                     }
@@ -266,12 +274,13 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                         depth: 0,
                         rows: ModelRc::default(),
                         language: SharedString::default(),
+                        diagram_image: Image::default(),
                     });
                     last_top_level_pos = range.end;
                 }
             }
 
-            // ---- Code Blocks ----
+            // ---- Code Blocks & Mermaid Diagrams ----
             Event::Start(Tag::CodeBlock(kind)) => {
                 if list_stack.is_empty() && !table_state.in_table && blockquote_depth == 0 {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
@@ -286,29 +295,73 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
             Event::End(TagEnd::CodeBlock) => {
                 if code_block_state.in_code_block {
                     code_block_state.in_code_block = false;
-                    let highlighted_md = code_block::highlight_code_block(
-                        &code_block_state.code_buf,
-                        &code_block_state.language,
-                    );
-                    let lang_label = if code_block_state.language.is_empty() {
-                        String::new()
+
+                    if code_block_state.language.eq_ignore_ascii_case("mermaid") {
+                        let diagram_img = mermaid::render_mermaid_diagram(&code_block_state.code_buf);
+                        elements.push(MarkdownElement {
+                            block_type: MarkdownBlockType::Mermaid,
+                            text: SharedString::from(code_block_state.code_buf.clone()),
+                            rich_text: to_styled_text(""),
+                            level: 0,
+                            is_ordered: false,
+                            prefix: SharedString::default(),
+                            is_task: false,
+                            is_checked: false,
+                            depth: 0,
+                            rows: ModelRc::default(),
+                            language: SharedString::from("MERMAID"),
+                            diagram_image: diagram_img,
+                        });
                     } else {
-                        code_block_state.language.to_uppercase()
-                    };
-                    elements.push(MarkdownElement {
-                        block_type: MarkdownBlockType::CodeBlock,
-                        text: SharedString::from(code_block_state.code_buf.clone()),
-                        rich_text: to_styled_text(&highlighted_md),
-                        level: 0,
-                        is_ordered: false,
-                        prefix: SharedString::default(),
-                        is_task: false,
-                        is_checked: false,
-                        depth: 0,
-                        rows: ModelRc::default(),
-                        language: SharedString::from(lang_label),
-                    });
+                        let highlighted_md = code_block::highlight_code_block(
+                            &code_block_state.code_buf,
+                            &code_block_state.language,
+                        );
+                        let lang_label = if code_block_state.language.is_empty() {
+                            String::new()
+                        } else {
+                            code_block_state.language.to_uppercase()
+                        };
+                        elements.push(MarkdownElement {
+                            block_type: MarkdownBlockType::CodeBlock,
+                            text: SharedString::from(code_block_state.code_buf.clone()),
+                            rich_text: to_styled_text(&highlighted_md),
+                            level: 0,
+                            is_ordered: false,
+                            prefix: SharedString::default(),
+                            is_task: false,
+                            is_checked: false,
+                            depth: 0,
+                            rows: ModelRc::default(),
+                            language: SharedString::from(lang_label),
+                            diagram_image: Image::default(),
+                        });
+                    }
                     last_top_level_pos = range.end;
+                }
+            }
+
+            // ---- Links ----
+            Event::Start(Tag::Link { dest_url, .. }) => {
+                is_in_link = true;
+                current_link_url = dest_url.to_string();
+                if let Some(frame) = item_stack.last_mut() {
+                    frame.rich_md.push('[');
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
+                    global_rich_md.push('[');
+                }
+            }
+            Event::End(TagEnd::Link) => {
+                if is_in_link {
+                    is_in_link = false;
+                    let sanitized = link::sanitize_url(&current_link_url);
+                    let close_link = format!("]({})", sanitized);
+                    if let Some(frame) = item_stack.last_mut() {
+                        frame.rich_md.push_str(&close_link);
+                    } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
+                        global_rich_md.push_str(&close_link);
+                    }
+                    current_link_url.clear();
                 }
             }
 
@@ -338,6 +391,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                         depth: 0,
                         rows: ModelRc::default(),
                         language: SharedString::default(),
+                        diagram_image: Image::default(),
                     });
                     last_top_level_pos = range.end;
                 }
@@ -370,6 +424,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                         depth: 0,
                         rows: rows_model,
                         language: SharedString::default(),
+                        diagram_image: Image::default(),
                     });
                     last_top_level_pos = range.end;
                 }
@@ -465,6 +520,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                     depth,
                     rows: ModelRc::default(),
                     language: SharedString::default(),
+                    diagram_image: Image::default(),
                 });
 
                 item_stack.push(ItemFrame {
@@ -494,6 +550,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                             depth: frame.depth,
                             rows: ModelRc::default(),
                             language: SharedString::default(),
+                            diagram_image: Image::default(),
                         };
                     }
                 }
@@ -609,6 +666,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
             || e.block_type == MarkdownBlockType::CodeBlock
             || e.block_type == MarkdownBlockType::DisplayMath
             || e.block_type == MarkdownBlockType::BlockQuote
+            || e.block_type == MarkdownBlockType::Mermaid
             || !e.text.is_empty()
     });
     elements

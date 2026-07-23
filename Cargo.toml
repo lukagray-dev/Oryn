@@ -17,6 +17,8 @@ notify = "6.1"
 pulldown-cmark = "0.11"
 regex = "1.10"
 syntect = "5.2"
+open = "5.3"
+merman = { version = "0.7", features = ["render"] }
 
 [build-dependencies]
 slint-build = "1.17.0"

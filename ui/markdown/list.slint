@@ -22,6 +22,7 @@ export component MarkdownList inherits Rectangle {
     in property <string> prefix: "";
     in property <bool> is_task: false;
     in property <bool> is_checked: false;
+    callback open-url(string);
 
     horizontal-stretch: 1;
     height: list_layout.preferred-height + 4px;

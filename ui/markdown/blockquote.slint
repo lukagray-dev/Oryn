@@ -9,6 +9,7 @@ import { Tokens } from "../shared/tokens.slint";
 export component MarkdownBlockQuote inherits Rectangle {
     in property <styled-text> rich_text;
     in property <int> depth: 0; // 0-indexed nesting depth (0 = '>', 1 = '>>', 2 = '>>>')
+    callback open-url(string);
 
     horizontal-stretch: 1;
     // Dynamic height calculation based on wrapped text height + 8px vertical padding

@@ -16,6 +16,7 @@ export component MainContent inherits Rectangle {
 
     // Callback for text modifications
     callback text_changed(string);
+    callback open-url(string);
 
     horizontal-stretch: 1;
     background: Tokens.window_background;
@@ -45,6 +46,10 @@ export component MainContent inherits Rectangle {
             // -----------------------------------------------------------------
             MarkdownView {
                 elements: root.markdown_elements;
+
+                open-url(url) => {
+                    root.open-url(url);
+                }
             }
         }
     }
