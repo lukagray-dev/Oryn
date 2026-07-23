@@ -9,6 +9,7 @@
 // (available in Slint >= 1.17). This lets Slint's native `StyledText` widget render
 // bold/italic/code/math inline formatting without raw HTML injection.
 
+pub mod blockquote;
 pub mod bold;
 pub mod code;
 pub mod code_block;
@@ -103,6 +104,8 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
     let mut current_heading_level: i32 = 1;
     let mut is_in_heading = false;
     let mut is_in_paragraph = false;
+    let mut blockquote_depth: usize = 0;
+    let mut max_blockquote_depth: usize = 0;
 
     // Buffer rebuilt in Markdown syntax so StyledText::from_markdown() renders it correctly
     let mut global_rich_md = String::new();
@@ -144,9 +147,47 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
 
     for (event, range) in parser.into_offset_iter() {
         match event {
+            // ---- BlockQuotes ----
+            Event::Start(Tag::BlockQuote(_)) => {
+                if blockquote_depth == 0 && list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block {
+                    check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
+                    global_rich_md.clear();
+                    max_blockquote_depth = 0;
+                }
+                blockquote_depth += 1;
+                if blockquote_depth > max_blockquote_depth {
+                    max_blockquote_depth = blockquote_depth;
+                }
+            }
+            Event::End(TagEnd::BlockQuote) => {
+                if blockquote_depth > 0 {
+                    blockquote_depth -= 1;
+                    if blockquote_depth == 0 {
+                        let md = blockquote::clean_blockquote_text(&global_rich_md);
+                        if !md.is_empty() {
+                            elements.push(MarkdownElement {
+                                block_type: MarkdownBlockType::BlockQuote,
+                                text: SharedString::from(md.clone()),
+                                rich_text: to_styled_text(&md),
+                                level: 0,
+                                is_ordered: false,
+                                prefix: SharedString::default(),
+                                is_task: false,
+                                is_checked: false,
+                                depth: (max_blockquote_depth.saturating_sub(1)) as i32,
+                                rows: ModelRc::default(),
+                                language: SharedString::default(),
+                            });
+                            last_top_level_pos = range.end;
+                        }
+                        global_rich_md.clear();
+                    }
+                }
+            }
+
             // ---- Headings ----
             Event::Start(Tag::Heading { level, .. }) => {
-                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block {
+                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block && blockquote_depth == 0 {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                 }
                 is_in_heading = true;
@@ -179,14 +220,14 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
 
             // ---- Paragraphs ----
             Event::Start(Tag::Paragraph) => {
-                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block {
+                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block && blockquote_depth == 0 {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                     is_in_paragraph = true;
                     global_rich_md.clear();
                 }
             }
             Event::End(TagEnd::Paragraph) => {
-                if is_in_paragraph && list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block {
+                if is_in_paragraph && list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block && blockquote_depth == 0 {
                     is_in_paragraph = false;
                     let md = paragraph::clean_paragraph_text(global_rich_md.trim());
                     if !md.is_empty() {
@@ -211,7 +252,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
 
             // ---- Horizontal Rule (---) ----
             Event::Rule => {
-                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block {
+                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block && blockquote_depth == 0 {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                     elements.push(MarkdownElement {
                         block_type: MarkdownBlockType::Rule,
@@ -232,7 +273,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
 
             // ---- Code Blocks ----
             Event::Start(Tag::CodeBlock(kind)) => {
-                if list_stack.is_empty() && !table_state.in_table {
+                if list_stack.is_empty() && !table_state.in_table && blockquote_depth == 0 {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                 }
                 code_block_state.in_code_block = true;
@@ -277,12 +318,12 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(&formatted);
                     frame.plain_text.push_str(&math_expr);
-                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
                     global_rich_md.push_str(&formatted);
                 }
             }
             Event::DisplayMath(math_expr) => {
-                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block {
+                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block && blockquote_depth == 0 {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                     let display_str = math::format_display_math(&math_expr);
                     elements.push(MarkdownElement {
@@ -304,7 +345,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
 
             // ---- Tables ----
             Event::Start(Tag::Table(alignments)) => {
-                if list_stack.is_empty() && !code_block_state.in_code_block {
+                if list_stack.is_empty() && !code_block_state.in_code_block && blockquote_depth == 0 {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                 }
                 table_state.in_table = true;
@@ -379,7 +420,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
 
             // ---- Lists ----
             Event::Start(Tag::List(start_number)) => {
-                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block {
+                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block && blockquote_depth == 0 {
                     check_and_insert_spacer(&mut elements, last_top_level_pos, range.start);
                 }
                 let is_ordered = start_number.is_some();
@@ -388,7 +429,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
             }
             Event::End(TagEnd::List(_)) => {
                 list_stack.pop();
-                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block {
+                if list_stack.is_empty() && !table_state.in_table && !code_block_state.in_code_block && blockquote_depth == 0 {
                     last_top_level_pos = range.end;
                 }
             }
@@ -473,7 +514,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 let marker = bold::open_bold_tag();
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(marker);
-                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
                     global_rich_md.push_str(marker);
                 }
             }
@@ -481,7 +522,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 let marker = bold::close_bold_tag();
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(marker);
-                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
                     global_rich_md.push_str(marker);
                 }
             }
@@ -490,7 +531,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 let marker = italic::open_italic_tag();
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(marker);
-                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
                     global_rich_md.push_str(marker);
                 }
             }
@@ -498,7 +539,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 let marker = italic::close_italic_tag();
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(marker);
-                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
                     global_rich_md.push_str(marker);
                 }
             }
@@ -506,14 +547,14 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
             Event::Start(Tag::Strikethrough) => {
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str("~~");
-                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
                     global_rich_md.push_str("~~");
                 }
             }
             Event::End(TagEnd::Strikethrough) => {
                 if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str("~~");
-                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
                     global_rich_md.push_str("~~");
                 }
             }
@@ -525,7 +566,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 } else if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push_str(&text);
                     frame.plain_text.push_str(&text);
-                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
                     global_rich_md.push_str(&text);
                 }
             }
@@ -537,7 +578,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                     if let Some(frame) = item_stack.last_mut() {
                         frame.rich_md.push_str(&formatted);
                         frame.plain_text.push_str(&code_str);
-                    } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
+                    } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
                         global_rich_md.push_str(&formatted);
                     }
                 }
@@ -548,7 +589,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
                 } else if let Some(frame) = item_stack.last_mut() {
                     frame.rich_md.push('\n');
                     frame.plain_text.push('\n');
-                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell {
+                } else if is_in_heading || is_in_paragraph || table_state.in_table_cell || blockquote_depth > 0 {
                     global_rich_md.push('\n');
                 }
             }
@@ -567,6 +608,7 @@ pub fn parse_markdown(markdown_text: &str) -> Vec<MarkdownElement> {
             || e.block_type == MarkdownBlockType::Table
             || e.block_type == MarkdownBlockType::CodeBlock
             || e.block_type == MarkdownBlockType::DisplayMath
+            || e.block_type == MarkdownBlockType::BlockQuote
             || !e.text.is_empty()
     });
     elements

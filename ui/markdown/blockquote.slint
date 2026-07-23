@@ -1,0 +1,37 @@
+// =============================================================================
+// Markdown Blockquote Renderer Component (`ui/markdown/blockquote.slint`)
+// =============================================================================
+// Renders GitHub-flavored Markdown blockquotes (`> `, `>> `, `>>> `) with dynamic height,
+// nested left accent bars (`#30363d`), muted typography (`#8b949e`), and rich inline text.
+
+import { Tokens } from "../shared/tokens.slint";
+
+export component MarkdownBlockQuote inherits Rectangle {
+    in property <styled-text> rich_text;
+    in property <int> depth: 0; // 0-indexed nesting depth (0 = '>', 1 = '>>', 2 = '>>>')
+
+    horizontal-stretch: 1;
+    // Dynamic height calculation based on wrapped text height + 8px vertical padding
+    height: blockquote_text.preferred-height + 8px;
+
+    // Render left accent bar for each nesting level
+    for level in (root.depth + 1) : Rectangle {
+        x: level * 16px;
+        y: 2px;
+        width: 3.5px;
+        height: parent.height - 4px;
+        background: #30363d;
+        border-radius: 2px;
+    }
+
+    // Blockquote text element with depth-indented position and width-driven wrapping
+    blockquote_text := StyledText {
+        x: (root.depth + 1) * 16px + 12px;
+        y: 4px;
+        width: parent.width - ((root.depth + 1) * 16px + 16px);
+        text: root.rich_text;
+        default-font-family: Tokens.editor_font_family;
+        default-font-size: Tokens.body_font_size;
+        default-color: #8b949e;
+    }
+}
